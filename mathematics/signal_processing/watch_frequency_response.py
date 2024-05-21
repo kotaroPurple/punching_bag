@@ -10,6 +10,14 @@ def calculate_frequency_response(
     frequency, response = signal.freqz(filter_b, filter_a, fs=fs)
     return frequency, response
 
+
+def butter_lowpass(lowcut: float, fs: int, order: int = 4):
+    nyq = 0.5 * fs
+    low = lowcut / nyq
+    b, a = signal.butter(order, low, btype='low')
+    return b, a
+
+
 name_list = ['5', '10', '15']
 
 filter_a_list = [
@@ -26,6 +34,11 @@ filter_b_list = [
 
 # sampling frequency
 fs = 500
+
+low_b, low_a = butter_lowpass(10., fs, order=4)
+filter_a_list.append(low_a)
+filter_b_list.append(low_b)
+name_list.append('butter 10')
 
 res_freq_list = []
 response_list = []
