@@ -1,6 +1,9 @@
 
 import streamlit as st
 
+from calculator import ComputationManager
+from calculator import ComputationParameters
+
 
 class StateManager:
     def __init__(self):
@@ -14,6 +17,8 @@ class StateManager:
             st.session_state.last_slider_value = st.session_state.slider_value
         if 'computation_needed' not in st.session_state:
             st.session_state.computation_needed = False
+        if 'computation_manager' not in st.session_state:
+            st.session_state.computation_manager = ComputationManager()
 
     @property
     def selected_option(self):
@@ -39,19 +44,20 @@ class StateManager:
         return (st.session_state.selected_option != st.session_state.last_selected_option or
                 st.session_state.slider_value != st.session_state.last_slider_value)
 
+    @property
+    def computation_needed(self):
+        return st.session_state.computation_needed
 
-class ComputationManager:
-    # @st.cache_data
-    def expensive_computation(self, x):
-        import time
-        time.sleep(2)  # Simulate a long computation
-        return x * x
+    @computation_needed.setter
+    def computation_needed(self, value):
+        st.session_state.computation_needed = value
 
-    # @st.cache_data
-    def load_file(self, file_path):
-        with open(file_path, 'r') as file:
-            data = file.read()
-        return data
+    def get_computation_manager(self):
+        return st.session_state.computation_manager
+
+    def get_computation_parameters(self) -> ComputationParameters:
+        param = ComputationParameters(self.slider_value, self.selected_option)
+        return param
 
 
 class StreamlitViewer:
@@ -60,7 +66,7 @@ class StreamlitViewer:
         self.sidebar_title = "Sidebar"
         self.sidebar_options = ["Option 1", "Option 2", "Option 3"]
         self.state_manager = StateManager()
-        self.computation_manager = ComputationManager()
+        self.computation_manager = self.state_manager.get_computation_manager()
 
     def display_title(self):
         st.title(self.title)
@@ -91,17 +97,19 @@ class StreamlitViewer:
             st.error("File not found. Please make sure 'example.txt' exists.")
 
         if self.state_manager.has_changed():
-            st.session_state.computation_needed = True
+            self.state_manager.computation_needed = True
             st.write("Values have changed. Please press the button to compute.")
 
-        if st.button("Compute") and st.session_state.computation_needed:
-            result = self.computation_manager.expensive_computation(self.state_manager.slider_value)
+        if st.button("Compute") and self.state_manager.computation_needed:
+            param = self.state_manager.get_computation_parameters()
+            result = self.computation_manager.expensive_computation(param)
             st.session_state.computation_result = result
-            st.session_state.computation_needed = False
+            self.state_manager.computation_needed = False
             self.state_manager.update_last_values()
             st.write(f"Computation result: {st.session_state.computation_result}")
         else:
             if 'computation_result' in st.session_state:
+                st.write("Computation already done...")
                 st.write(f"Computation result: {st.session_state.computation_result}")
             else:
                 st.write("No computation yet")
