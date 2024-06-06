@@ -30,3 +30,16 @@ m = 2
 r = 0.2
 sampen = sample_entropy(signal, m, r)
 print(f'Sample Entropy: {sampen}')
+
+
+# def compute_differences(vector):
+#     # ベクトルの長さを取得
+#     n = len(vector)
+
+#     # すべての i < j を満たすインデックスペアを取得
+#     i_indices, j_indices = np.triu_indices(n, k=1)
+
+#     # i < j を満たす差分を計算
+#     differences = vector[j_indices] - vector[i_indices]
+
+#     return differences
