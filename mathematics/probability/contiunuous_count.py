@@ -60,6 +60,8 @@ def count_continuous_zero_and_one(data: NDArray) -> tuple[CountInfo, CountInfo]:
 
 def evaluate_continuous(info: CountInfo, continuous_count: int) -> CountEvaluation:
     evaluation = CountEvaluation(value=continuous_count)
+    if len(info.continuous) == 0:
+        return evaluation
     evaluation.equal = continuous_count in info.continuous
     evaluation.equal_and_more = bool(np.any(info.continuous >= continuous_count))  # 1つでも大きい
     evaluation.more = evaluation.equal_and_more and (evaluation.equal is False)
@@ -73,7 +75,7 @@ def evaluate_continuous(info: CountInfo, continuous_count: int) -> CountEvaluati
 def main():
     # np.random.seed(1)
     n_trial = 10000
-    one_prob = 0.05
+    one_prob = 0.005
     number = 400
     one_hist = np.zeros(number, dtype=np.int64)
     maximum_info = {key: 0 for key in range(1, 6)}
