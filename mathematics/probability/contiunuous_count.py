@@ -2,7 +2,7 @@
 from dataclasses import dataclass
 
 import numpy as np
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 from tqdm import tqdm
 from numpy.typing import NDArray
 
@@ -72,10 +72,44 @@ def evaluate_continuous(info: CountInfo, continuous_count: int) -> CountEvaluati
     return evaluation
 
 
+def make_prob_matrix(p_list: list[float]) -> NDArray:
+    length = len(p_list)
+    mat = np.zeros((length + 1, length + 1))
+    for i, p_i_to_next in enumerate(p_list):
+        p_back = 1. - p_i_to_next
+        mat[i, 0] = p_back
+        mat[i, i+1] = p_i_to_next
+    mat[-1, 0] = 1.0
+    return mat.T
+
+
+def calcualte_eigens(mat: NDArray) -> None:
+    pass
+
+
+def main2():
+    p_list = [0.05, 0.05, 0.05]
+    p_mat = make_prob_matrix(p_list)
+    print(p_mat)
+    eigen_w, eigen_v = np.linalg.eig(p_mat)
+    inv_v = np.linalg.inv(eigen_v)
+    tmp_mat = np.zeros_like(p_mat)
+    tmp_mat[0, 0] = 1.0
+    result = eigen_v @ tmp_mat @ inv_v
+    start_vec = np.zeros(len(p_list) + 1)
+    start_vec[0] = 1.
+    convergence = result @ start_vec
+    real_convergence = np.real(convergence)
+    print(real_convergence)
+    print(np.sum(real_convergence))
+    plt.scatter(np.arange(len(real_convergence)), real_convergence)
+    plt.show()
+
+
 def main():
     # np.random.seed(1)
     n_trial = 10000
-    one_prob = 0.005
+    one_prob = 0.05
     number = 400
     one_hist = np.zeros(number, dtype=np.int64)
     maximum_info = {key: 0 for key in range(1, 6)}
@@ -102,3 +136,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+    main2()
