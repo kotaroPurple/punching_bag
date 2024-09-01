@@ -14,6 +14,8 @@ contourpy==1.2.1
     # via matplotlib
 cycler==0.12.1
     # via matplotlib
+dearpygui==1.11.1
+    # via punching-bag
 fonttools==4.53.1
     # via matplotlib
 kiwisolver==1.4.5
