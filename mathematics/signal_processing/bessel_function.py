@@ -15,7 +15,7 @@ x = np.linspace(0, 20, 500)
 
 # ベッセル関数の次数
 jn_dim = 20
-n_values = [i for i in range(jn_dim)]
+n_values = [i+1 for i in range(jn_dim)]
 
 # 周波数
 f_obj = 1.0  # [Hz]
