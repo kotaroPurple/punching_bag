@@ -34,10 +34,28 @@ for d in d_list:
 one_besseld = bessel_list[0][1]
 fs, values = zip(*one_besseld)
 
+# plt.figure(figsize=(10, 6))
+# for one_bessel in bessel_list:
+#     d, data = one_bessel
+#     fs, values = zip(*data)
+#     plt.plot(fs, np.abs(values), label=f'{d}')
+# plt.legend()
+# plt.show()
+
+# x の範囲
+x = np.linspace(0, 20, 500)
+
+# ベッセル関数の次数
+n_values = [i for i in range(1, 11)]
+
+# プロット
 plt.figure(figsize=(10, 6))
-for one_bessel in bessel_list:
-    d, data = one_bessel
-    fs, values = zip(*data)
-    plt.plot(fs, np.abs(values), label=f'{d}')
+for n in n_values:
+    _jn = jn(n, x)
+    plt.plot(x/ALPHA, _jn, label=f'J_{n}(x)')
+
+plt.vlines(d_list, 0, 1.0, color='black', alpha=0.7)
+plt.xlim(0, x.max()/ALPHA)
+plt.ylim(-0.6, 0.6)
 plt.legend()
 plt.show()
