@@ -10,6 +10,10 @@
 #   universal: false
 
 -e file:.
+certifi==2024.8.30
+    # via requests
+charset-normalizer==3.3.2
+    # via requests
 contourpy==1.2.1
     # via matplotlib
 cycler==0.12.1
@@ -18,17 +22,29 @@ dearpygui==1.11.1
     # via punching-bag
 fonttools==4.53.1
     # via matplotlib
+idna==3.8
+    # via requests
+joblib==1.4.2
+    # via scikit-learn
 kiwisolver==1.4.5
     # via matplotlib
 matplotlib==3.9.2
+    # via neurokit2
+    # via punching-bag
+neurokit2==0.2.10
     # via punching-bag
 numpy==2.0.1
     # via contourpy
     # via matplotlib
+    # via neurokit2
+    # via pandas
     # via punching-bag
+    # via scikit-learn
     # via scipy
 packaging==24.1
     # via matplotlib
+pandas==2.2.2
+    # via neurokit2
 pillow==10.4.0
     # via matplotlib
 pyparsing==3.1.2
@@ -41,7 +57,22 @@ pyqt6-sip==13.8.0
     # via pyqt6
 python-dateutil==2.9.0.post0
     # via matplotlib
+    # via pandas
+pytz==2024.1
+    # via pandas
+requests==2.32.3
+    # via neurokit2
+scikit-learn==1.5.1
+    # via neurokit2
 scipy==1.14.0
+    # via neurokit2
     # via punching-bag
+    # via scikit-learn
 six==1.16.0
     # via python-dateutil
+threadpoolctl==3.5.0
+    # via scikit-learn
+tzdata==2024.1
+    # via pandas
+urllib3==2.2.2
+    # via requests
