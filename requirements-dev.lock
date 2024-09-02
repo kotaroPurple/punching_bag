@@ -10,27 +10,55 @@
 #   universal: false
 
 -e file:.
+appnope==0.1.4
+    # via ipykernel
+asttokens==2.4.1
+    # via stack-data
 certifi==2024.8.30
     # via requests
 charset-normalizer==3.3.2
     # via requests
+comm==0.2.2
+    # via ipykernel
 contourpy==1.2.1
     # via matplotlib
 cycler==0.12.1
     # via matplotlib
 dearpygui==1.11.1
     # via punching-bag
+debugpy==1.8.5
+    # via ipykernel
+decorator==5.1.1
+    # via ipython
+executing==2.1.0
+    # via stack-data
 fonttools==4.53.1
     # via matplotlib
 idna==3.8
     # via requests
+ipykernel==6.29.5
+    # via punching-bag
+ipython==8.27.0
+    # via ipykernel
+jedi==0.19.1
+    # via ipython
 joblib==1.4.2
     # via scikit-learn
+jupyter-client==8.6.2
+    # via ipykernel
+jupyter-core==5.7.2
+    # via ipykernel
+    # via jupyter-client
 kiwisolver==1.4.5
     # via matplotlib
 matplotlib==3.9.2
     # via neurokit2
     # via punching-bag
+matplotlib-inline==0.1.7
+    # via ipykernel
+    # via ipython
+nest-asyncio==1.6.0
+    # via ipykernel
 neurokit2==0.2.10
     # via punching-bag
 numpy==2.0.1
@@ -42,11 +70,28 @@ numpy==2.0.1
     # via scikit-learn
     # via scipy
 packaging==24.1
+    # via ipykernel
     # via matplotlib
 pandas==2.2.2
     # via neurokit2
+parso==0.8.4
+    # via jedi
+pexpect==4.9.0
+    # via ipython
 pillow==10.4.0
     # via matplotlib
+platformdirs==4.2.2
+    # via jupyter-core
+prompt-toolkit==3.0.47
+    # via ipython
+psutil==6.0.0
+    # via ipykernel
+ptyprocess==0.7.0
+    # via pexpect
+pure-eval==0.2.3
+    # via stack-data
+pygments==2.18.0
+    # via ipython
 pyparsing==3.1.2
     # via matplotlib
 pyqt6==6.7.1
@@ -56,10 +101,14 @@ pyqt6-qt6==6.7.2
 pyqt6-sip==13.8.0
     # via pyqt6
 python-dateutil==2.9.0.post0
+    # via jupyter-client
     # via matplotlib
     # via pandas
 pytz==2024.1
     # via pandas
+pyzmq==26.2.0
+    # via ipykernel
+    # via jupyter-client
 requests==2.32.3
     # via neurokit2
 scikit-learn==1.5.1
@@ -69,10 +118,25 @@ scipy==1.14.0
     # via punching-bag
     # via scikit-learn
 six==1.16.0
+    # via asttokens
     # via python-dateutil
+stack-data==0.6.3
+    # via ipython
 threadpoolctl==3.5.0
     # via scikit-learn
+tornado==6.4.1
+    # via ipykernel
+    # via jupyter-client
+traitlets==5.14.3
+    # via comm
+    # via ipykernel
+    # via ipython
+    # via jupyter-client
+    # via jupyter-core
+    # via matplotlib-inline
 tzdata==2024.1
     # via pandas
 urllib3==2.2.2
     # via requests
+wcwidth==0.2.13
+    # via prompt-toolkit
