@@ -28,8 +28,8 @@ def main():
 
     for freq, delta in zip(freqs, deltas):
         _, x = make_wave(fs, time_range, freq, delta)
-        x_with_window = x * np.hanning(len(x))
         fft_window = 2**(int(np.log2(len(x))))
+        x_with_window = x[:fft_window] * np.hanning(fft_window)
         fft_result, fft_freq = get_fft(fs, x_with_window, fft_window)
         fft_amp = np.abs(fft_result) / len(fft_result)
         peak_value = np.max(fft_amp)
