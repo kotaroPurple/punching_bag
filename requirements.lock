@@ -10,8 +10,9 @@
 #   universal: false
 
 -e file:.
-appnope==0.1.4
-    # via ipykernel
+antlr4-python3-runtime==4.9.3
+    # via hydra-core
+    # via omegaconf
 asttokens==2.4.1
     # via stack-data
 certifi==2024.8.30
@@ -34,6 +35,8 @@ executing==2.1.0
     # via stack-data
 fonttools==4.53.1
     # via matplotlib
+hydra-core==1.3.2
+    # via punching-bag
 idna==3.8
     # via requests
 ipykernel==6.29.5
@@ -69,7 +72,10 @@ numpy==2.0.1
     # via punching-bag
     # via scikit-learn
     # via scipy
+omegaconf==2.3.0
+    # via hydra-core
 packaging==24.1
+    # via hydra-core
     # via ipykernel
     # via matplotlib
 pandas==2.2.2
@@ -106,6 +112,8 @@ python-dateutil==2.9.0.post0
     # via pandas
 pytz==2024.1
     # via pandas
+pyyaml==6.0.2
+    # via omegaconf
 pyzmq==26.2.0
     # via ipykernel
     # via jupyter-client
