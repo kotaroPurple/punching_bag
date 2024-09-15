@@ -13,6 +13,32 @@ LIGHT_OF_SPEED = 3.e8
 ALPHA = 4 * np.pi * SENSOR_FREQUENCY / LIGHT_OF_SPEED
 
 
+def butter_bandpass(lowcut: float, highcut: float, fs: int, order: int=5) -> NDArray:
+    nyq = 0.5 * fs
+    low = lowcut / nyq
+    high = highcut / nyq
+    sos = signal.butter(order, [low, high], analog=False, btype='band', output='sos')
+    return sos
+
+
+def apply_bandpass_filter(
+        data: NDArray, lowcut: float, highcut: float, fs: int, order: int=5) -> NDArray:
+    sos_values = butter_bandpass(lowcut, highcut, fs, order)
+    filtered = signal.sosfiltfilt(sos_values, data, axis=-1)
+    return filtered
+
+
+def calculate_signal_power(data: NDArray, times: NDArray, step: int, window: int) -> tuple[NDArray, NDArray]:
+    power_array = []
+    time_array = []
+    for i in range(0, len(data)-window, step):
+        segment = data[i:i+window]
+        power = np.sqrt(np.mean(segment * np.conj(segment)))
+        power_array.append(power)
+        time_array.append(times[i])
+    return np.array(power_array), np.array(time_array)
+
+
 def calculate_bessel_coeff(n_degree: int, amplitude: float) -> float:
     return jn(n_degree, ALPHA * amplitude)
 
@@ -91,7 +117,7 @@ def main():
     time_range = 70.
     # amplitudes, frequency list, delta phase list
     # mix
-    d_list = [200.e-6, 5.e-3]
+    d_list = [200.e-6, 4.e-3]
     f_list = [1., 0.3]
     delta_list = [np.pi/6, np.pi/6]
     # # mix
@@ -108,8 +134,18 @@ def main():
     # delta_list = [np.pi/6]
     # waves
     times, iq_wave, phase = generate_waves(fs, time_range, d_list, f_list, delta_list)
+
+    # bandpass filter
+    lowcut = 3.
+    highcut = 10.
+    iq_filtered = apply_bandpass_filter(iq_wave, lowcut, highcut, fs, order=5)
+
+    # power
+    iq_power, power_times = calculate_signal_power(iq_filtered, times, 5, fs//1)
+
     # fft
-    fft_result, fft_freq = calculate_fft(iq_wave, fs)
+    # fft_result, fft_freq = calculate_fft(iq_wave, fs)
+    fft_result, fft_freq = calculate_fft(iq_filtered, fs)
     fft_all_amp = np.abs(fft_result) / len(fft_result)
     fft_amp_without_minus, fft_freq_without_minus = get_abs_without_minus_frequency(
         fft_result, fft_freq)
@@ -125,8 +161,12 @@ def main():
     abs_theoretical_coeffs = abs_theoretical_coeffs * (_fft_amp_max / _abs_thoretical_max)
 
     plt.subplot(311)
-    plt.plot(times, np.real(iq_wave), alpha=0.5)
-    plt.plot(times, np.imag(iq_wave), alpha=0.5)
+    # plt.plot(times, np.real(iq_wave), alpha=0.5)
+    # plt.plot(times, np.imag(iq_wave), alpha=0.5)
+    plt.plot(times, np.real(iq_filtered), alpha=0.5)
+    plt.plot(times, np.imag(iq_filtered), alpha=0.5)
+    # plt.plot(times, np.abs(iq_filtered), c='black', alpha=0.5)
+    plt.plot(power_times, iq_power, c='black', alpha=0.5)
 
     plt.subplot(312)
     plt.plot(fft_freq_without_minus, fft_amp_without_minus)
