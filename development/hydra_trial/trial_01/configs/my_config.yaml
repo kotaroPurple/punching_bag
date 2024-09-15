@@ -1,0 +1,6 @@
+target_dir:
+  - path: "./configs/dirs.yaml"  # configs/dirs.yaml を読み込む設定
+  # - params: params  # configs/params.yaml を読み込む設定
+
+processing:
+  method: "example_method"
