@@ -10,6 +10,23 @@ LIGHT_OF_SPEED = 3.e8
 ALPHA = 4 * np.pi * SENSOR_FREQUENCY / LIGHT_OF_SPEED
 
 
+def simple_harmonic_theoretical_power(
+        displacement: float, bessel_max_degree: int = 20, power_degree: int = 10) -> NDArray:
+    # prepare
+    bessel_max_degree = max(1, abs(bessel_max_degree))
+    power_degree = abs(power_degree)
+    # main
+    power_list = []
+    for n_freq in range(power_degree):
+        power = 0.
+        for i in range(-bessel_max_degree, bessel_max_degree + 1):
+            power += 2. * calculate_bessel_coeff(i, displacement) * calculate_bessel_coeff(i - n_freq, displacement)  # NOQA
+        if n_freq == 0:
+            power /= 2.
+        power_list.append(power)
+    return np.array(power_list)
+
+
 def calculate_integraration(
         base_frequency: float, coeff_n: int, target_coeff_freq: float, stft_time: float) -> complex:
     if coeff_n == target_coeff_freq:
@@ -80,15 +97,28 @@ def generate_waves(
 
 
 def main():
+    # wave
+    fs = 500
     # amplitudes, frequency list, delta phase list
     displacement = 200.e-6  # heart [m]
     # displacement = 2.e-3  # respiration [m]
-    # displacement = 0.1  # respiration [m]
+    displacement = 0.1  # respiration [m]
     base_freq = 1.  # [Hz]
     stft_time = (1/base_freq) * 0.5
 
     stft_freq_coeff = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
 
+    # wave
+    times, iq_wave, _ = generate_waves(fs, 2 * (1 / base_freq), [displacement], [base_freq], [0.])
+
+    plt.subplot(211)
+    plt.plot(times, np.real(iq_wave), alpha=0.5)
+    plt.plot(times, np.imag(iq_wave), alpha=0.5)
+    plt.subplot(212)
+    plt.plot(times, iq_wave * iq_wave.conj())
+
+    # stft
+    plt.figure()
     for i, coeff in enumerate(stft_freq_coeff):
         power_list = simple_harmonic_theoretical_stft(
             displacement, base_freq, coeff, stft_time, bessel_max_degree=40, power_degree=10)
@@ -97,6 +127,15 @@ def main():
             base_freq * np.arange(len(power_list)), power_list,
             c=f'C{i}', label=f'{coeff * base_freq:.2f} [Hz]', s=10)
         # plt.yscale('log')
+    plt.legend()
+
+    plt.figure()
+    power_list = simple_harmonic_theoretical_power(
+        displacement, bessel_max_degree=40, power_degree=10)
+    print(power_list)
+    # power_list /= power_list[1]
+    plt.scatter(np.arange(len(power_list)), np.abs(power_list), s=10)
+    # plt.yscale('log')
     plt.legend()
     plt.show()
 
