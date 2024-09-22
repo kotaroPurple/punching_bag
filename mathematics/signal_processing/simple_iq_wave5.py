@@ -102,20 +102,20 @@ def main():
     # amplitudes, frequency list, delta phase list
     displacement = 200.e-6  # heart [m]
     # displacement = 2.e-3  # respiration [m]
-    displacement = 0.1  # respiration [m]
+    # displacement = 0.1  # respiration [m]
     base_freq = 1.  # [Hz]
     stft_time = (1/base_freq) * 0.5
 
     stft_freq_coeff = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
 
-    # wave
-    times, iq_wave, _ = generate_waves(fs, 2 * (1 / base_freq), [displacement], [base_freq], [0.])
+    # # wave
+    # times, iq_wave, _ = generate_waves(fs, 2 * (1 / base_freq), [displacement], [base_freq], [0.])
 
-    plt.subplot(211)
-    plt.plot(times, np.real(iq_wave), alpha=0.5)
-    plt.plot(times, np.imag(iq_wave), alpha=0.5)
-    plt.subplot(212)
-    plt.plot(times, iq_wave * iq_wave.conj())
+    # plt.subplot(211)
+    # plt.plot(times, np.real(iq_wave), alpha=0.5)
+    # plt.plot(times, np.imag(iq_wave), alpha=0.5)
+    # plt.subplot(212)
+    # plt.plot(times, iq_wave * iq_wave.conj())
 
     # stft
     plt.figure()
@@ -128,16 +128,17 @@ def main():
             c=f'C{i}', label=f'{coeff * base_freq:.2f} [Hz]', s=10)
         # plt.yscale('log')
     plt.legend()
-
-    plt.figure()
-    power_list = simple_harmonic_theoretical_power(
-        displacement, bessel_max_degree=40, power_degree=10)
-    print(power_list)
-    # power_list /= power_list[1]
-    plt.scatter(np.arange(len(power_list)), np.abs(power_list), s=10)
-    # plt.yscale('log')
-    plt.legend()
     plt.show()
+
+    # plt.figure()
+    # power_list = simple_harmonic_theoretical_power(
+    #     displacement, bessel_max_degree=40, power_degree=10)
+    # print(power_list)
+    # # power_list /= power_list[1]
+    # plt.scatter(np.arange(len(power_list)), np.abs(power_list), s=10)
+    # # plt.yscale('log')
+    # plt.legend()
+    # plt.show()
 
 
 if __name__ == '__main__':
