@@ -11,8 +11,14 @@ SENSOR_FREQUENCY = 24.e9
 ALPHA = 4 * np.pi * SENSOR_FREQUENCY / LIGHT_OF_SPEED
 
 # model
+stick_length = [0.1, 0.1]
+init_angle = [-np.pi/2, np.pi/2]
 stick_length = [0.1, 0.05, 0.05, 0.1]
 init_angle = [-np.pi/2, -np.pi/2, np.pi/2, np.pi/2]
+
+# _length1 = [0.001 * (i+1) for i in range(100)]
+# stick_length = _length1 + _length1
+# init_angle = [-np.pi/2 for i in range(100)] + [np.pi/2 for i in range(100)]
 
 
 # アニメーションの設定
@@ -77,12 +83,13 @@ def update(frame, positions, iq_waves, sum_iq_wave, plt_objects_):
 
 
 def generate_wave(
-        velocity_array: NDArray, direction_array: NDArray, times: NDArray,
+        position_array: NDArray, velocity_array: NDArray, direction_array: NDArray, times: NDArray,
         init_angle: float, amplitude: float = 1,) -> NDArray:
     # accumulate v.direction (N, dim) -> (N)
     inners = np.sum(velocity_array * direction_array, axis=1)  # (N)
     pre_angles = np.r_[[0.], ALPHA * cumulative_trapezoid(inners, times)]
-    angles = init_angle + pre_angles
+    delta_angle = ALPHA * np.linalg.norm(position_array, axis=1)
+    angles = init_angle + pre_angles + delta_angle
     # wave
     wave = amplitude * np.exp(1.j * angles)
     return wave
@@ -92,8 +99,8 @@ def main():
     # define model
     sensor_position = np.zeros(2)
     stick_center = np.array([0., 1.])
-    total_time = 3.
-    step_time = 0.001
+    total_time = 10.
+    step_time = 0.0005
     times = np.arange(0., total_time, step_time)
     # # angular velocity
     swing_period = 3.
@@ -128,11 +135,16 @@ def main():
     directions = np.array(_directions)
     # waves
     _iq_waves = []
-    for velocity, direction in zip(velocities, directions):
-        iq = generate_wave(velocity, direction, times, 0., 1.)
+    for position, velocity, direction in zip(positions, velocities, directions):
+        iq = generate_wave(position - sensor_position, velocity, direction, times, 0., 1.)
         _iq_waves.append(iq)
     iq_waves = np.array(_iq_waves)
     sum_iq_wave = np.sum(iq_waves, axis=0)
+
+    # plt.figure()
+    # plt.plot(sum_iq_wave[:].real, sum_iq_wave[:].imag)
+    # # plt.plot(times, np.abs(sum_iq_wave))
+    # plt.show()
 
     # アニメーションの生成
     plt_objects = init_plot()
