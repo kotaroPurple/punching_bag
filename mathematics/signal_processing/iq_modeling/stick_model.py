@@ -1,6 +1,7 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.integrate import cumulative_trapezoid
 from matplotlib.animation import FuncAnimation
 from numpy.typing import NDArray
 
@@ -39,8 +40,6 @@ def update(frame, positions, iq_waves, sum_iq_wave):
 
     # 2つ目のプロット
     ax2.clear()
-    # ax2.plot(np.real(iq_waves[0, from_:to_]), np.imag(iq_waves[0, from_:to_]), label='IQ Wave 1')
-    # ax2.plot(np.real(iq_waves[1, from_:to_]), np.imag(iq_waves[1, from_:to_]), label='IQ Wave 2')
     ax2.scatter(np.real(iq_waves[0, frame]), np.imag(iq_waves[0, frame]), label='IQ Wave 1', s=10)
     ax2.scatter(np.real(iq_waves[1, frame]), np.imag(iq_waves[1, frame]), label='IQ Wave 2', s=10)
     ax2.plot(
@@ -60,9 +59,7 @@ def generate_wave(
         init_angle: float, amplitude: float = 1,) -> NDArray:
     # accumulate v.direction (N, dim) -> (N)
     inners = np.sum(velocity_array * direction_array, axis=1)  # (N)
-    diff_t = times[1:] - times[:-1]
-    diff_angles = inners[:-1] * diff_t
-    pre_angles = np.r_[[0.], ALPHA * np.cumsum(diff_angles)]
+    pre_angles = np.r_[[0.], ALPHA * cumulative_trapezoid(inners, times)]
     angles = init_angle + pre_angles
     # wave
     wave = amplitude * np.exp(1.j * angles)
@@ -78,7 +75,7 @@ def main():
     times = np.arange(0., total_time, step_time)
     # # angular velocity
     swing_period = 3.
-    angle_range = [0., -np.pi]
+    angle_range = [0., np.pi]
     angles = np.zeros_like(times)
     angular_velocity = np.zeros_like(times)
     coeff = (angle_range[1] - angle_range[0]) / (swing_period / 2.)
