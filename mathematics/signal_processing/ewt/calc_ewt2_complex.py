@@ -439,64 +439,85 @@ def main():
     freq = np.linspace(0, fs / 2, len(spectrum))
 
     # 境界点の周波数への変換
-    boundary_freq = boundaries * fs / np.pi
+    boundary_freq = boundaries * fs / np.pi / 2
 
     # フィルタバンクの周波数軸
-    filter_freq = np.linspace(0, fs / 2, filter_bank.shape[0])
+    filter_freq = np.linspace(0, fs / 2, filter_bank.shape[0] // 2)
+    half_size = filter_bank.shape[0] // 2
 
     # プロットの作成
-    plt.figure(figsize=(18, 16))
+    plt.figure(figsize=(18, 9))
 
     # 1. 元の信号の振幅と位相
-    plt.subplot(5, 1, 1)
-    plt.plot(np.arange(N) / fs, np.abs(signal), label='Amplitude', color='blue')
-    plt.plot(np.arange(N) / fs, np.angle(signal), label='Phase', color='orange')
+    plt.subplot(4, 1, 1)
+    plt.plot(np.arange(N) / fs, signal.real, label='Real', color='blue', alpha=0.7)
+    plt.plot(np.arange(N) / fs, signal.imag, label='Imag', color='orange', alpha=0.7)
     plt.title("Original Complex Signal")
     plt.xlabel("Time (s)")
-    plt.ylabel("Amplitude / Phase")
+    plt.ylabel("Real / Imag")
     plt.legend()
     plt.grid(True)
 
     # 2. スペクトルの振幅と位相、境界点
-    plt.subplot(5, 1, 2)
-    plt.plot(freq, np.abs(spectrum), color='green', label='Magnitude Spectrum')
-    plt.plot(freq, np.angle(spectrum), color='purple', label='Phase Spectrum')
+    plt.subplot(4, 1, 2)
+    plt.plot(freq, np.abs(spectrum), color='black', label='Magnitude Spectrum')
+    # plt.plot(freq, np.angle(spectrum), color='purple', label='Phase Spectrum')
     for b in boundary_freq:
         plt.axvline(x=b, color='red', linestyle='--', label='Boundary' if b == boundary_freq[0] else "")
+
+    ax2 = plt.twinx()
+    for k in range(filter_bank.shape[1]):
+        ax2.plot(filter_freq, np.abs(filter_bank[:half_size, k]), label=f'Filter {k}', alpha=0.7)
     plt.title("Spectrum with Boundaries")
     plt.xlabel("Frequency (Hz)")
     plt.ylabel("Magnitude / Phase")
     plt.legend()
     plt.grid(True)
 
-    # 3. フィルタバンクの振幅
-    plt.subplot(5, 1, 3)
-    for k in range(filter_bank.shape[1]):
-        plt.plot(filter_freq, np.abs(filter_bank[:, k]), label=f'Filter {k}')
-    plt.title("EWT Filter Bank (Magnitude)")
-    plt.xlabel("Frequency (Hz)")
-    plt.ylabel("Filter Magnitude")
-    plt.legend()
-    plt.grid(True)
+    # # 3. フィルタバンクの振幅
+    # plt.subplot(4, 1, 3)
+    # for k in range(filter_bank.shape[1]):
+    #     plt.plot(filter_freq, np.abs(filter_bank[:half_size, k]), label=f'Filter {k}')
+    # plt.title("EWT Filter Bank (Magnitude)")
+    # plt.xlabel("Frequency (Hz)")
+    # plt.ylabel("Filter Magnitude")
+    # plt.legend()
+    # plt.grid(True)
 
-    # 4. フィルタバンクの位相
-    plt.subplot(5, 1, 4)
-    for k in range(filter_bank.shape[1]):
-        plt.plot(filter_freq, np.angle(filter_bank[:, k]), label=f'Filter {k}')
-    plt.title("EWT Filter Bank (Phase)")
-    plt.xlabel("Frequency (Hz)")
-    plt.ylabel("Filter Phase")
-    plt.legend()
-    plt.grid(True)
+    # # 4. フィルタバンクの位相
+    # plt.subplot(5, 1, 4)
+    # for k in range(filter_bank.shape[1]):
+    #     plt.plot(filter_freq, np.angle(filter_bank[:half_size, k]), label=f'Filter {k}')
+    # plt.title("EWT Filter Bank (Phase)")
+    # plt.xlabel("Frequency (Hz)")
+    # plt.ylabel("Filter Phase")
+    # plt.legend()
+    # plt.grid(True)
 
-    # 5. EWTによるサブバンドの振幅と位相
-    plt.subplot(5, 1, 5)
+    # sum wave
+    sum_wave = np.sum(ewt_result, axis=1)
+
+    # 3. EWTによるサブバンドの振幅と位相
+    plt.subplot(4, 1, 3)
     for k in range(ewt_result.shape[1]):
-        plt.plot(np.arange(N-1) / fs, np.abs(ewt_result[:, k]), label=f'EWT Component {k} Amplitude')
-        plt.plot(np.arange(N-1) / fs, np.angle(ewt_result[:, k]), linestyle='--', label=f'EWT Component {k} Phase')
-    plt.title("EWT Components (Amplitude and Phase)")
+        plt.plot(np.arange(N-1) / fs, ewt_result[:, k].real, label=f'Component {k} (Real)', alpha=0.5)
+        # plt.plot(np.arange(N-1) / fs, np.angle(ewt_result[:, k]), linestyle='--', label=f'EWT Component {k} Phase')
+    plt.plot(np.arange(N-1) / fs, sum_wave.real, color='black', alpha=0.5)
+    plt.title("EWT Components (Real)")
     plt.xlabel("Time (s)")
-    plt.ylabel("Amplitude / Phase")
+    plt.ylabel("Wave")
+    plt.legend(loc='upper right')
+    plt.grid(True)
+
+    # 4. EWTによるサブバンドの振幅と位相
+    plt.subplot(4, 1, 4)
+    for k in range(ewt_result.shape[1]):
+        plt.plot(np.arange(N-1) / fs, ewt_result[:, k].imag, label=f'Component {k} (Imag)', alpha=0.5)
+        # plt.plot(np.arange(N-1) / fs, np.angle(ewt_result[:, k]), linestyle='--', label=f'EWT Component {k} Phase')
+    plt.plot(np.arange(N-1) / fs, sum_wave.imag, color='black', alpha=0.5)
+    plt.title("EWT Components (Imag)")
+    plt.xlabel("Time (s)")
+    plt.ylabel("Wave")
     plt.legend(loc='upper right')
     plt.grid(True)
 
