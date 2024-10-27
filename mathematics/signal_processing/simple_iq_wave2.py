@@ -50,14 +50,14 @@ def calculate_bessel_coeff_list(n_degree: list[int], amplitude: list[float]) -> 
 
 def generate_waves(
         fs: int, time_range: float, d_list: list[float], freq_list: list[float],
-        delta_list: list[float]) -> tuple[NDArray, NDArray, NDArray]:
+        initial_position: list[float]) -> tuple[NDArray, NDArray, NDArray]:
     # make waves
     length = int(fs * time_range)
     times = np.arange(length) / fs
     # phase
     phase = np.zeros_like(times)
-    for d, f, delta in zip(d_list, freq_list, delta_list):
-        phase += ALPHA * d * np.sin(2 * np.pi * f * times - delta)
+    for d, f, init_p in zip(d_list, freq_list, initial_position):
+        phase += ALPHA * d * np.sin(2 * np.pi * f * times) + ALPHA * init_p
     # waves
     i_wave = np.cos(phase)
     q_wave = np.sin(phase)
@@ -119,21 +119,22 @@ def main():
     # mix
     d_list = [200.e-6, 4.e-3]
     f_list = [1., 0.3]
-    delta_list = [np.pi/6, np.pi/6]
+    init_theta_list = [0., 0.]
     # # mix
     # d_list = [1.e-3, 5.e-3]
     # f_list = [0.5, 0.3]
-    # delta_list = [0., 0.]
+    # init_theta_list = [0., 0.]
     # # heart
     # d_list = [200.e-6]
     # f_list = [1.]
-    # delta_list = [np.pi/6]
+    # init_theta_list = [np.pi/2, np.pi/2]
     # # respiration
     # d_list = [5.e-3]
     # f_list = [0.3]
-    # delta_list = [np.pi/6]
+    # init_theta_list = [np.pi/2, np.pi/2]
     # waves
-    times, iq_wave, phase = generate_waves(fs, time_range, d_list, f_list, delta_list)
+    init_position_list = [theta / ALPHA for theta in init_theta_list]
+    times, iq_wave, phase = generate_waves(fs, time_range, d_list, f_list, init_position_list)
 
     # bandpass filter
     lowcut = 3.
@@ -161,12 +162,12 @@ def main():
     abs_theoretical_coeffs = abs_theoretical_coeffs * (_fft_amp_max / _abs_thoretical_max)
 
     plt.subplot(311)
-    # plt.plot(times, np.real(iq_wave), alpha=0.5)
-    # plt.plot(times, np.imag(iq_wave), alpha=0.5)
-    plt.plot(times, np.real(iq_filtered), alpha=0.5)
-    plt.plot(times, np.imag(iq_filtered), alpha=0.5)
+    plt.plot(times, np.real(iq_wave), alpha=0.5)
+    plt.plot(times, np.imag(iq_wave), alpha=0.5)
+    # plt.plot(times, np.real(iq_filtered), alpha=0.5)
+    # plt.plot(times, np.imag(iq_filtered), alpha=0.5)
     # plt.plot(times, np.abs(iq_filtered), c='black', alpha=0.5)
-    plt.plot(power_times, iq_power, c='black', alpha=0.5)
+    # plt.plot(power_times, iq_power, c='black', alpha=0.5)
 
     plt.subplot(312)
     plt.plot(fft_freq_without_minus, fft_amp_without_minus)
