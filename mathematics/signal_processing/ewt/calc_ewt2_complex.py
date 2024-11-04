@@ -13,7 +13,8 @@ def ewt1d(
     try_completion: bool = False,
     regularization: str = 'average',
     length_filter: int = 10,
-    sigma_filter: float = 5.0
+    sigma_filter: float = 5.0,
+    lwm_window_size: int = 50
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Perform the Empirical Wavelet Transform of a 1D signal over specified scales.
@@ -27,6 +28,7 @@ def ewt1d(
         regularization (str, optional): Regularization method ('none', 'gaussian', 'average'). Default is 'average'.
         length_filter (int, optional): Width of the filters (Gaussian or average). Default is 10.
         sigma_filter (float, optional): Standard deviation of the Gaussian filter. Default is 5.0.
+        lwm_window_size (int): Size of the window for LWM algorithm.
 
     Returns:
         Tuple[np.ndarray, np.ndarray, np.ndarray]: 
@@ -46,7 +48,8 @@ def ewt1d(
         max_scales,
         regularization,
         length_filter,
-        sigma_filter
+        sigma_filter,
+        lwm_window_size
     )
     boundaries = boundaries * np.pi / round(spectrum.size)
 
@@ -82,7 +85,8 @@ def ewt_boundaries_detect(
     max_scales: int,
     regularization: str,
     length_filter: int,
-    sigma_filter: float
+    sigma_filter: float,
+    window_size: int = 50
 ) -> np.ndarray:
     """
     Segment the spectrum into a specified number of supports using different techniques.
@@ -95,6 +99,7 @@ def ewt_boundaries_detect(
         regularization (str): Regularization method ('none', 'gaussian', 'average').
         length_filter (int): Width of the filters.
         sigma_filter (float): Standard deviation of the Gaussian filter.
+        window_size (int): Size of the window for LWM algorithm.
 
     Returns:
         np.ndarray: List of detected boundaries.
@@ -124,6 +129,8 @@ def ewt_boundaries_detect(
         boundaries = local_max_min(presignal, max_scales)
     elif detection_method == "locmaxminf":
         boundaries = local_max_min(presignal, max_scales, original_spectrum=spectrum)
+    elif detection_method == "lwm":
+        boundaries = local_window_max(presignal, max_scales, window_size)
     else:
         raise ValueError(f"Unsupported detection method: {detection_method}")
 
@@ -171,7 +178,7 @@ def local_max(spectrum: np.ndarray, max_scales: int) -> np.ndarray:
 def local_max_min(
     regularized_spectrum: np.ndarray,
     max_scales: int,
-    original_spectrum: np.ndarray = None
+    original_spectrum: np.ndarray|None = None
 ) -> np.ndarray:
     """
     Segment the spectrum by detecting the lowest local minima between the N largest local maxima.
@@ -383,6 +390,69 @@ def ewt_meyer_wavelet(
     return wavelet
 
 
+def local_window_max(
+    spectrum: np.ndarray,
+    max_scales: int,
+    window_size: int
+) -> np.ndarray:
+    """
+    Segment the spectrum using the Local Window Maxima (LWM) method.
+    see: https://www.mdpi.com/1424-8220/18/5/1645
+
+    Parameters:
+        spectrum (np.ndarray): The spectrum to segment.
+        max_scales (int): Maximum number of bands.
+        window_size (int): Size of the window to search for local maxima.
+
+    Returns:
+        np.ndarray: List of detected boundary indices.
+    """
+    num_boundaries = max_scales - 1
+    boundaries = []
+
+    # コピーを作成して操作
+    spectrum_copy = spectrum.copy()
+
+    for _ in range(max_scales):
+        # ウィンドウ内での局所最大値を検出
+        max_index = np.argmax(spectrum_copy)
+        max_value = spectrum_copy[max_index]
+
+        if max_value == 0:
+            break  # 残りの信号がゼロの場合、終了
+
+        # LWMとして最大値を選択
+        boundaries.append(max_index)
+
+        # ウィンドウ内の他の値をゼロにする
+        start = max(max_index - window_size // 2, 0)
+        end = min(max_index + window_size // 2 + 1, len(spectrum_copy))
+        spectrum_copy[start:end] = 0
+
+    # 境界がmax_scalesに満たない場合は補完
+    if len(boundaries) < max_scales:
+        # 必要に応じて追加の処理を実装
+        pass
+
+    # ソートして昇順に並べる
+    boundaries = np.sort(boundaries)
+
+    # スペクトルの境界を計算（隣接するLWMの中点）
+    segment_boundaries = []
+    for i in range(1, len(boundaries)):
+        midpoint = (boundaries[i - 1] + boundaries[i]) / 2
+        segment_boundaries.append(midpoint)
+
+    # 必要な境界数に合わせて切り捨てまたは補完
+    if len(segment_boundaries) > num_boundaries:
+        segment_boundaries = segment_boundaries[:num_boundaries]
+    elif len(segment_boundaries) < num_boundaries:
+        # 例えば、スペクトルの終端を追加する
+        segment_boundaries.extend([len(spectrum)] * (num_boundaries - len(segment_boundaries)))
+
+    return np.array(segment_boundaries)
+
+
 # ----------------------------
 # テストデータの生成
 # ----------------------------
@@ -426,11 +496,13 @@ def main():
         signal,
         max_scales=4,
         use_log=False,
-        detection_method="locmax",
+        # detection_method="locmax",
+        detection_method='lwm',
         try_completion=True,
         regularization='average',
         length_filter=10,
-        sigma_filter=5.0
+        sigma_filter=5.0,
+        lwm_window_size=50
     )
 
     # フーリエスペクトルの計算
