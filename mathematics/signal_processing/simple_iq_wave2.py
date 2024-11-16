@@ -111,6 +111,37 @@ def calculate_theoretical_iq_coeff(
     return result_coeff_list, result_freq_list
 
 
+def allan_variance(x, max_tau_exp=10):
+    N = len(x)
+    tau_values = []
+    allan_variances = []
+    print(x.shape)
+
+    # 2の累乗でスケールを取る
+    tau_values = [2**i for i in range(1, max_tau_exp+1)]
+    taus = []
+
+    for tau in tau_values:
+        m = N // tau  # スロット数
+        if m <= 1:
+            continue
+
+        # 各スロットの平均を計算
+        averages = [np.mean(x[i * tau: (i + 1) * tau]) for i in range(m)]
+
+        # 隣接スロット間の変動を計算
+        delta_x = np.diff(averages)
+
+        # アラン分散を計算
+        allan_var = 0.5 * np.mean(delta_x * delta_x.conj())
+
+        taus.append(tau)
+        allan_variances.append(allan_var)
+
+    return np.array(taus), np.array(allan_variances)
+
+
+
 def main():
     # prepare
     fs = 500
@@ -161,7 +192,13 @@ def main():
     _abs_thoretical_max = np.max(abs_theoretical_coeffs)
     abs_theoretical_coeffs = abs_theoretical_coeffs * (_fft_amp_max / _abs_thoretical_max)
 
-    plt.subplot(311)
+    # allan variance
+    taus, allan_vars = allan_variance(iq_wave, max_tau_exp=12)
+    taus_filtered, allan_vars_filterd = allan_variance(iq_filtered, max_tau_exp=12)
+
+    # plot
+    n_plot = 4
+    plt.subplot(n_plot, 1, 1)
     plt.plot(times, np.real(iq_wave), alpha=0.5)
     plt.plot(times, np.imag(iq_wave), alpha=0.5)
     # plt.plot(times, np.real(iq_filtered), alpha=0.5)
@@ -169,14 +206,19 @@ def main():
     # plt.plot(times, np.abs(iq_filtered), c='black', alpha=0.5)
     # plt.plot(power_times, iq_power, c='black', alpha=0.5)
 
-    plt.subplot(312)
+    plt.subplot(n_plot, 1, 2)
     plt.plot(fft_freq_without_minus, fft_amp_without_minus)
     plt.xlim(-5., 5.)
 
-    plt.subplot(313)
+    plt.subplot(n_plot, 1, 3)
     plt.plot(fft_freq, fft_all_amp)
     plt.vlines(theoretical_freq, 0., abs_theoretical_coeffs, color='red', alpha=0.5)
     plt.xlim(-5., 5.)
+
+    plt.subplot(n_plot, 1, 4)
+    plt.plot(taus / fs, allan_vars / np.max(allan_vars), label='original')
+    plt.plot(taus_filtered / fs, allan_vars_filterd / np.max(allan_vars_filterd), label='filtered')
+    plt.legend()
     plt.show()
 
 
