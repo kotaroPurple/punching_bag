@@ -107,3 +107,56 @@ plt.xticks(rotation=90)  # x軸のラベルを90度回転させて表示
 plt.legend(title='C1 and C2')
 
 st.pyplot(fig)
+
+
+# 複数の混同行列のサンプルデータ
+confusion_matrices = [
+    np.array([[50, 10], [5, 40]]),  # 混同行列1
+    np.array([[30, 15], [10, 45]]),  # 混同行列2
+    np.array([[60, 5], [8, 32]]),    # 混同行列3
+    np.array([[70, 20], [15, 30]]),  # 混同行列4
+    np.array([[40, 5], [3, 60]])     # 混同行列5
+]
+
+# 列数を指定
+num_columns = 3  # 必要な列数を指定
+# num_rows = -(-len(confusion_matrices) // num_columns)  # 必要な行数を計算
+num_rows = (len(confusion_matrices) - 1) // num_columns + 1
+
+# 最大値を取得して全ての混同行列を同じスケールで比較するための最大値を計算
+max_value = max(np.max(mat) for mat in confusion_matrices)
+
+# Streamlitのレイアウトでヒートマップを表示
+st.title('Confusion Matrices Comparison')
+
+# 行ごとに列を配置
+for i in range(num_rows):
+    cols = st.columns(num_columns)  # 行ごとに列を分ける
+    for j in range(num_columns):
+        # 各列に混同行列を描画
+        idx = i * num_columns + j
+        if idx < len(confusion_matrices):
+            mat = confusion_matrices[idx]
+            fig, ax = plt.subplots(figsize=(5, 4))
+            sns.heatmap(mat / mat.sum(), annot=True, fmt='.2f', cmap='Blues', vmin=0., vmax=1.0,
+                        xticklabels=['Predicted Positive', 'Predicted Negative'],
+                        yticklabels=['Actual Positive', 'Actual Negative'], cbar=True, ax=ax)
+            ax.set_xlabel('Predicted')
+            ax.set_ylabel('Actual')
+            ax.set_title(f'Confusion Matrix {idx + 1}')
+            cols[j].pyplot(fig)
+
+#
+df = pd.DataFrame({"A": ["foo", "foo", "foo", "foo", "foo",
+                        "bar", "bar", "bar", "bar"],
+                    "B": ["one", "one", "one", "two", "two",
+                        "one", "one", "two", "two"],
+                    "C": ["small", "large", "large", "small",
+                        "small", "large", "small", "small",
+                        "large"],
+                    "D": [1, 2, 2, 3, 3, 4, 5, 6, 7],
+                    "E": [2, 4, 5, 5, 6, 6, 8, 9, 9]})
+pivot_df = pd.pivot_table(df, values=['D', 'E'], index=['A', 'B'], columns=['C'], aggfunc="first")
+print(pivot_df[('D', 'large')])
+st.dataframe(pivot_df)
+
