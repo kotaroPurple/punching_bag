@@ -9,9 +9,9 @@ fs = 100         # サンプリング周波数 [Hz]
 T = 1.0 / fs     # サンプリング間隔 [秒]
 t = np.arange(N) * T  # 時間軸 [秒]
 # 低周波成分（1Hz相当）と高周波成分（10Hz相当）の合成信号
-f_low = 1
-f_high = 20
-signal = np.cos(2 * np.pi * f_low * t) + 0.5 * np.cos(2 * np.pi * f_high * t)
+f_low = 1.2
+f_high = 20.1
+signal = np.cos(2 * np.pi * f_low * t) + 0.5 * np.cos(2 * np.pi * f_high * t) + (np.random.random(N) - 0.5) * 0.5
 
 # DCTの適用（DCT-IIを使用）
 dct_coefficients = dct(signal, type=2, norm='ortho')
