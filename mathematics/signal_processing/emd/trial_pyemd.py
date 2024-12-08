@@ -45,7 +45,7 @@ plt.tight_layout()
 EEMD
 """
 # Define signal
-t = np.linspace(0, 1, 200)
+t = np.linspace(0, 1, 300)
 
 def _sin(x, p):
     return np.sin(2*np.pi*x*t+p)
@@ -55,6 +55,7 @@ S += 5*_sin(11,2.7)
 S += 3*_sin(14,1.6)
 S += 1*np.sin(4*2*np.pi*(t-0.8)**2)
 S += t**2.1 -t
+S += 0.5 * (np.random.random(len(S)) - 0.5)
 
 # Assign EEMD to `eemd` variable
 eemd = EEMD()
