@@ -24,13 +24,13 @@ def calculate_one_term(
 
 def calculate_stft(
         alpha: float, order_n_list: list[int], in_omega: float, omega_map: NDArray, tau_map: NDArray, \
-        time_range: float) -> NDArray:
+        time_range: float, initial_phase: float = 0.) -> NDArray:
     # sum term
     values = np.zeros(omega_map.shape, dtype=np.complex128)
     for order_n in order_n_list:
         values += calculate_one_term(alpha, order_n, in_omega, omega_map, tau_map, time_range)
     # phase term
-    phases = time_range * np.exp(-1.j * omega_map * tau_map)
+    phases = time_range * np.exp(1.j * (initial_phase - omega_map * tau_map))
     return phases * values
 
 
@@ -190,10 +190,56 @@ def remove_negative_frequency_trial():
     plt.show()
 
 
-def main():
+def compare_positive_and_all_frequencies():
     object_freq = 1.
     object_omega = 2. * np.pi * object_freq
     object_displacement = 0.0005  # [m]
+    start_time = 0.
+    n_wave = 3
+    end_time = n_wave / object_freq
+    fs = 100
+    alpha = 2 * WAVE_NUMBER * object_displacement
+    # wave freq
+    start_n = 3
+    end_n = 6
+    order_n_list = np.arange(-end_n, end_n+1)
+    order_n_list = [int(value) for value in order_n_list if abs(value) >= start_n]
+    # positive_order_n_list = [value for value in order_n_list if value >= 0]
+
+    # original wave
+    iq_wave, wave_times = generate_bessel_wave(start_time, end_time, 1/fs, alpha, order_n_list, object_omega)
+    positive_iq_wave = remove_negative_frequency(iq_wave)
+
+    # amps
+    iq_amp = np.abs(iq_wave)
+    positive_amp = np.abs(positive_iq_wave)
+
+    # plot
+    fig = plt.figure(figsize=(12, 6))
+    gs= GridSpec(2, 2, figure=fig)
+
+    # #
+    ax1 = fig.add_subplot(gs[0, 0])
+    ax1.plot(iq_wave.real, iq_wave.imag, alpha=0.5)
+    ax1.set_xlim(-2., 2.)
+    ax1.set_ylim(-2., 2.)
+
+    ax2 = fig.add_subplot(gs[0, 1])
+    ax2.plot(positive_iq_wave.real, positive_iq_wave.imag, alpha=0.5)
+    ax2.set_xlim(-2., 2.)
+    ax2.set_ylim(-2., 2.)
+
+    ax3 = fig.add_subplot(gs[1, 0])
+    ax3.plot(wave_times, iq_amp, alpha=0.5)
+    ax3.plot(wave_times, positive_amp, alpha=0.5)
+
+    plt.show()
+
+
+def main():
+    object_freq = 1.
+    object_omega = 2. * np.pi * object_freq
+    object_displacement = 0.001  # [m]
     start_time = 0.
     end_time = 10 / object_freq
     step_time = 0.025
@@ -201,12 +247,15 @@ def main():
     end_omega = 10. * (2 * np.pi)
     step_omega = 0.025 * (2 * np.pi)
     fs = 1000
-    omegas, times = generate_omega_and_time_map(start_time, end_time, step_time, start_omega, end_omega, step_omega, minus_omega=False)
+    minus_omega = False
+    omegas, times = generate_omega_and_time_map(start_time, end_time, step_time, start_omega, end_omega, step_omega, minus_omega=minus_omega)
     # stft
+    initial_phase = np.deg2rad(30.)
     stft_time_rage = 0.5 * 1 / object_freq
     # order_n_list = [-6, -5, -4, -3, -2, -1, 1, 2, 3, 4, 5, 6]
-    order_n_list = [-6, -5, -4, -3, -2, 2, 3, 4, 5, 6]
-    # order_n_list = [-6, -5, -4, -3, 3, 4, 5, 6]
+    # order_n_list = [-6, -5, -4, -3, -2, 2, 3, 4, 5, 6]
+    order_n_list = [-6, -5, -4, -3, 3, 4, 5, 6]
+    # order_n_list = [-4, -3, 3, 4]
     # order_n_list = [-6, -5, -4, 4, 5, 6]
     positive_order_n_list = [value for value in order_n_list if value >= 0]
     alpha = 2 * WAVE_NUMBER * object_displacement
@@ -214,10 +263,10 @@ def main():
     iq_wave, wave_times = generate_bessel_wave(start_time, end_time, 1/fs, alpha, order_n_list, object_omega)
     positive_iq_wave = remove_negative_frequency(iq_wave)
     iq_powers, power_times = calculate_iq_power(wave_times, positive_iq_wave, 5, 100)
-    stft_values = calculate_stft(alpha, order_n_list, object_omega, omegas, times, stft_time_rage)
+    stft_values = calculate_stft(alpha, order_n_list, object_omega, omegas, times, stft_time_rage, initial_phase)
     power_stft_values = stft_values * stft_values.conj()
-    power_stft_values = power_stft_values.T  # (horizon: time, vertical: freq)
-    power_at_time = np.sum(power_stft_values.real, axis=0)
+    power_stft_values = np.abs(power_stft_values.T)  # (horizon: time, vertical: freq)
+    power_at_time = np.sum(power_stft_values, axis=0)
     one_time = times[:, 0]
 
     # natural_positive_iq_wave, _ = generate_bessel_wave(start_time, end_time, 1/fs, alpha, positive_order_n_list, object_omega)
@@ -243,16 +292,20 @@ def main():
     plt.show()
 
     omega_to_freq = 1. / (2. * np.pi)
-    plt_extent = (one_time.min(), one_time.max(), omega_to_freq * omegas.min(), omega_to_freq * omegas.max())
-    _, ax = plt.subplots()
-    ax.imshow(power_stft_values.real, extent=plt_extent, origin='lower')
+    omega_min = omega_to_freq * omegas.min() if minus_omega else 0.
+    plt_extent = (one_time.min(), one_time.max(), omega_min, omega_to_freq * omegas.max())
+    _, ax = plt.subplots(figsize=(8, 8))
+    im = ax.imshow(power_stft_values, extent=plt_extent, origin='lower', aspect='auto')
     ax2 = ax.twinx()
-    ax2.plot(one_time, power_at_time, c='white', alpha=0.5)
+    alpha = 0. if minus_omega else 0.5
+    ax2.plot(one_time, power_at_time, c='white', alpha=alpha)
     ax.set_xlabel('Time [sec]')
     ax.set_ylabel('Freq [Hz]')
+    plt.colorbar(im, ax=ax, label='Power')
     plt.show()
 
 
 if __name__ == '__main__':
-    remove_negative_frequency_trial()
+    # remove_negative_frequency_trial()
+    compare_positive_and_all_frequencies()
     # main()
