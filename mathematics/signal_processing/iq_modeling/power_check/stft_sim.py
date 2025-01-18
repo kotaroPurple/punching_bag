@@ -193,14 +193,14 @@ def remove_negative_frequency_trial():
 def compare_positive_and_all_frequencies():
     object_freq = 1.
     object_omega = 2. * np.pi * object_freq
-    object_displacement = 0.0005  # [m]
+    object_displacement = 0.000_1  # [m]
     start_time = 0.
     n_wave = 3
     end_time = n_wave / object_freq
     fs = 100
     alpha = 2 * WAVE_NUMBER * object_displacement
     # wave freq
-    start_n = 3
+    start_n = 2
     end_n = 6
     order_n_list = np.arange(-end_n, end_n+1)
     order_n_list = [int(value) for value in order_n_list if abs(value) >= start_n]
@@ -213,6 +213,12 @@ def compare_positive_and_all_frequencies():
     # amps
     iq_amp = np.abs(iq_wave)
     positive_amp = np.abs(positive_iq_wave)
+
+    # phase
+    phase_array = np.arctan2(positive_iq_wave.imag, positive_iq_wave.real)
+    phase_array_unwrapped = np.unwrap(phase_array)
+    diff_phase = phase_array_unwrapped[1:] - phase_array_unwrapped[:-1]
+    diff_phase = np.r_[diff_phase[0], diff_phase]
 
     # plot
     fig = plt.figure(figsize=(12, 6))
@@ -232,6 +238,9 @@ def compare_positive_and_all_frequencies():
     ax3 = fig.add_subplot(gs[1, 0])
     ax3.plot(wave_times, iq_amp, alpha=0.5)
     ax3.plot(wave_times, positive_amp, alpha=0.5)
+
+    ax4 = fig.add_subplot(gs[1, 1])
+    ax4.plot(wave_times, diff_phase)
 
     plt.show()
 
