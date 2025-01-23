@@ -19,6 +19,26 @@ class FftInfo:
     all_freq: NDArray
 
 
+def extract_frequency_info(data: NDArray, fs: int) -> tuple[NDArray, NDArray, NDArray]:
+    fft_value = np.fft.fftshift(np.fft.fft(data))
+    fft_freq = np.fft.fftshift(np.fft.fftfreq(len(fft_value), d=1/fs))
+    fft_abs = np.abs(fft_value) / len(data)
+    fft_angle = np.angle(fft_value)
+    # shift
+    fft_abs = np.fft.fftshift(fft_abs)
+    fft_angle = np.fft.fftshift(fft_angle)
+    fft_freq = np.fft.fftshift(fft_freq)
+    return fft_abs, fft_angle, fft_freq
+
+
+def find_local_maxima_fft(fft_abs: NDArray, threshold: float) -> NDArray:
+    # maximum
+    indices = (fft_abs > threshold) \
+        * (np.r_[fft_abs[:-1] > fft_abs[1:], True]) \
+        * (np.r_[True, fft_abs[1:] > fft_abs[:-1]])
+    return indices
+
+
 def apply_highpass_filter(
         data: NDArray, cutoff_freq: float, fs: int, order: int = 4, zero_phase: bool = False) -> tuple[NDArray, NDArray]:
     # 正規化カットオフ周波数 (ナイキスト周波数で正規化)
@@ -115,14 +135,14 @@ def calculate_rn_from_transformation(
     return result
 
 
-def _calculate_phase_term(wave_number_vector: NDArray, positions: NDArray) -> NDArray:
-    # wave_vector: (3,)
-    # positions: (N,3)
-    # exp(i.(k.r + |k|.|r|))
-    k_dot_r = positions @ wave_number_vector
-    wave_number = np.linalg.norm(wave_number_vector)
-    lengths = np.linalg.norm(positions, axis=1)
-    return np.exp(1.j * (k_dot_r + wave_number * lengths))
+# def _calculate_phase_term(wave_number_vector: NDArray, positions: NDArray) -> NDArray:
+#     # wave_vector: (3,)
+#     # positions: (N,3)
+#     # exp(i.(k.r + |k|.|r|))
+#     k_dot_r = positions @ wave_number_vector
+#     wave_number = np.linalg.norm(wave_number_vector)
+#     lengths = np.linalg.norm(positions, axis=1)
+#     return np.exp(1.j * (k_dot_r + wave_number * lengths))
 
 
 def calculate_phase_term(wave_number_vector: NDArray, positions: NDArray) -> NDArray:
@@ -157,7 +177,7 @@ def main1():
     # parameters
     process_time = 20.  # [sec]
     fs = 100  # [Hz]
-    object_freq = 0.5  # [Hz]
+    object_freq = 1.025  # [Hz]
     object_amp = 0.001  # [m]
     object_base = 0.5  # [m]
     angle_amp = np.deg2rad(1.)  # [rad]
@@ -188,6 +208,21 @@ def main1():
     filtered_iq, sos = apply_highpass_filter(iq_wave, cutoff, fs, order=4, zero_phase=False)
     filtered_phase, _ = apply_highpass_filter(phase_term, cutoff, fs, order=4, zero_phase=False)
 
+    # fft
+    phase_fft_abs, phase_fft_angle, phase_fft_freq = extract_frequency_info(phase_term, fs)
+    phase_maxima_indices = find_local_maxima_fft(phase_fft_abs, 0.05)
+    peak_phase_abs = phase_fft_abs[phase_maxima_indices]
+    peak_phase_angle = phase_fft_angle[phase_maxima_indices]
+    peak_phase_freq = phase_fft_freq[phase_maxima_indices]
+
+    plt.scatter(phase_fft_freq, phase_fft_abs, s=5)
+
+    for freq, amp, ph in zip(peak_phase_freq, peak_phase_abs, peak_phase_angle):
+        plt.annotate(f"{ph:.2f} rad", xy=(freq, amp), xytext=(0, 10),
+                    textcoords='offset points', ha='center', color='red', fontsize=9)
+    plt.xlim(-10, 10)
+    plt.show()
+
     # cut for plot
     cut_index = 5
     n_period = 3
@@ -206,7 +241,7 @@ def main1():
 
     # plot
     fig = plt.figure(figsize=(12, 6))
-    gs= GridSpec(3, 2, figure=fig)
+    gs= GridSpec(4, 2, figure=fig)
 
     ax1 = fig.add_subplot(gs[0, 0])
     ax1.plot(sub_times, sub_phase_term.real)
