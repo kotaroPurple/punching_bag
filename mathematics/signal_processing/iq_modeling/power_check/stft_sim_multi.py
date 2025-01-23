@@ -123,12 +123,12 @@ def main():
     # objects
     init_phases = [0., 0.]  # 物体までの距離依存 (同物体であれば同じ数値のはず)
     delayed_phases = [0., 0.5 * (2 * np.pi)]  # それぞれの位相ズレ
-    displacements = [0.000_0, 0.000_01]  # 振幅 [m]
-    _frequencies = [0.3, 1.]  # [Hz]
+    displacements = [0.000_1, 0.000_01]  # 振幅 [m]
+    _frequencies = [0.25, 1.]  # [Hz]
     omegas = [2 * np.pi * f for f in _frequencies]
     # iq wave
     start_time = 0.
-    end_time = 100.
+    end_time = 20.
     fs = 100
     times = generate_time(start_time, end_time, fs)
     iq_wave = generate_iq_wave_from_multi_objects(
@@ -141,7 +141,7 @@ def main():
 
     # extract positive frequencies
     # iq_positive_frequency = remove_negative_frequency(iq_wave_minus_mean)
-    iq_positive_frequency = extract_specified_frequency(iq_wave_minus_mean, (0., 10.5), fs)
+    iq_positive_frequency = extract_specified_frequency(iq_wave_minus_mean, (3.5, 10.5), fs)
     positive_amp = np.abs(iq_positive_frequency)
     positive_phase, positive_diff_phase = generate_phase_from_iq(iq_positive_frequency, 5)
 
@@ -151,7 +151,7 @@ def main():
     max_freq = 5.
 
     # plot
-    plt.figure(figsize=(12, 6))
+    plt.figure(figsize=(12, 8))
     plt.subplot(2, 2, 1)
     plt.plot(times, iq_wave.real, alpha=0.5)
     plt.plot(times, iq_wave.imag, alpha=0.5)
@@ -169,6 +169,10 @@ def main():
     ax2.plot(times, positive_diff_phase, c='C1', alpha=0.5, label='diff phase')
     ax1.legend()
     ax2.legend()
+
+    plt.subplot(2, 2, 4)
+    plt.plot(times, iq_positive_frequency.real, alpha=0.5)
+    plt.plot(times, iq_positive_frequency.imag, alpha=0.5)
 
     plt.show()
 
