@@ -23,4 +23,6 @@ dependencies = [
     "streamlit>=1.39.0",
     "plotly>=5.24.1",
     "dearpygui>=2.0.0",
+    "tkeasygui>=1.0.21",
+    "pytk>=0.0.2.1",
 ]
