@@ -87,9 +87,9 @@ def extract_frequency_info(data: NDArray, fs: int) -> tuple[NDArray, NDArray]:
 
 def main():
     # setting
-    init_phases = [0.0 * (2 * np.pi), 0.0 * (2 * np.pi)]  # 物体までの距離依存 (同物体であれば同じ数値のはず)
+    init_phases = [0.0 * (2 * np.pi), 0.25 * (2 * np.pi)]  # 物体までの距離依存 (同物体であれば同じ数値のはず)
     delayed_phases = [0., 0.0 * (2 * np.pi)]  # それぞれの位相ズレ
-    displacements = [0.000_1, 0.001_0]  # 振幅 [m]
+    displacements = [0.000_02, 0.000_2]  # 振幅 [m]
     _frequencies = [1., 0.1]  # [Hz]
     omegas = [2 * np.pi * f for f in _frequencies]
     # time
@@ -103,7 +103,7 @@ def main():
 
     # iq wave
     only_side_freq = True
-    order_ns = [2, 3, 4]
+    order_ns = [1, 2, 3, 4]
     minus_order_ns = [-v for v in order_ns]
     order_m_max = 3
     iq_wave = np.zeros(times.shape, dtype=np.complex128)
@@ -122,14 +122,14 @@ def main():
     show_freq_max = 6.
 
     # power
-    double_side_iq = iq_wave + minus_f_iq_wave
+    double_side_iq = (iq_wave + minus_f_iq_wave) / 2
     iq_wave_power = iq_wave * iq_wave.conj()
     minus_f_iq_power = minus_f_iq_wave * minus_f_iq_wave.conj()
     ds_iq_power = double_side_iq * double_side_iq.conj()
 
     # cut wave
     plot_proces_time = 10.
-    plot_start_time = 1.
+    plot_start_time = 0.
     plot_end_time = plot_start_time + plot_proces_time
     plot_start_index = int(fs * plot_start_time)
     plot_end_index = int(fs * plot_end_time)
@@ -138,6 +138,7 @@ def main():
     cut_all_iq_wave = all_iq_wave[plot_start_index:plot_end_index]
     cut_iq_wave = iq_wave[plot_start_index:plot_end_index]
     cut_minus_f_iq_wave = minus_f_iq_wave[plot_start_index:plot_end_index]
+    cut_double_side_iq = double_side_iq[plot_start_index:plot_end_index]
     cut_iq_wave_power = iq_wave_power[plot_start_index:plot_end_index]
     cut_minus_f_iq_power = minus_f_iq_power[plot_start_index:plot_end_index]
     cut_ds_iq_power = ds_iq_power[plot_start_index:plot_end_index]
@@ -153,6 +154,16 @@ def main():
     ax1.set_title('fft')
     ax1.legend()
     ax1.set_xlim(-show_freq_max, show_freq_max)
+    ax1.set_yscale('log')
+
+    # # wave: pos, neg, pos + neg
+    ax01 = fig.add_subplot(gs[0, 1])
+    ax01.plot(cut_times, cut_double_side_iq.real, alpha=0.5, c='blue', label='P,N I')
+    ax01.plot(cut_times, cut_double_side_iq.imag, alpha=0.5, c='skyblue', label='P,N Q')
+    ax01.plot(cut_times, cut_iq_wave.real, alpha=0.5, c='red', label='I')
+    ax01.plot(cut_times, cut_iq_wave.imag, alpha=0.5, c='orange', label='Q')
+    ax01.set_title('IQ waves')
+    ax01.legend()
 
     # # wave: all vs plus freq
     ax2 = fig.add_subplot(gs[1, 0])
@@ -176,9 +187,9 @@ def main():
     ax4 = fig.add_subplot(gs[2, 1])
     ax4.plot(cut_times, cut_iq_wave_power, alpha=0.5, c='red', label='positive power')
     ax4.plot(cut_times, cut_minus_f_iq_power, alpha=0.5, c='green', label='netative power')
-    ax4.plot(cut_times, cut_ds_iq_power, alpha=0.5, c='black', label='pos + neg power')
+    # ax4.plot(cut_times, cut_ds_iq_power, alpha=0.5, c='black', label='pos + neg power')
     ax4.set_title('IQ Power: positive vs negative frequency')
-    ax4.set_ylim(0, 1.1 * max(cut_iq_wave_power.max(), cut_minus_f_iq_power.max(), cut_ds_iq_power.max()))
+    # ax4.set_ylim(0, 1.1 * max(cut_iq_wave_power.max(), cut_minus_f_iq_power.max(), cut_ds_iq_power.max()))
     ax4.legend()
 
     # # show

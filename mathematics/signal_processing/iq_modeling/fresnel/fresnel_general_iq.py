@@ -173,7 +173,7 @@ def calculate_integration_term(
 
 def main1():
     # plane select
-    use_moving_z = True
+    use_moving_z = False
     # parameters
     process_time = 20.  # [sec]
     fs = 100  # [Hz]
@@ -215,13 +215,13 @@ def main1():
     peak_phase_angle = phase_fft_angle[phase_maxima_indices]
     peak_phase_freq = phase_fft_freq[phase_maxima_indices]
 
-    plt.scatter(phase_fft_freq, phase_fft_abs, s=5)
+    # plt.scatter(phase_fft_freq, phase_fft_abs, s=5)
 
-    for freq, amp, ph in zip(peak_phase_freq, peak_phase_abs, peak_phase_angle):
-        plt.annotate(f"{ph:.2f} rad", xy=(freq, amp), xytext=(0, 10),
-                    textcoords='offset points', ha='center', color='red', fontsize=9)
-    plt.xlim(-10, 10)
-    plt.show()
+    # for freq, amp, ph in zip(peak_phase_freq, peak_phase_abs, peak_phase_angle):
+    #     plt.annotate(f"{ph:.2f} rad", xy=(freq, amp), xytext=(0, 10),
+    #                 textcoords='offset points', ha='center', color='red', fontsize=9)
+    # plt.xlim(-10, 10)
+    # plt.show()
 
     # cut for plot
     cut_index = 5
@@ -276,6 +276,13 @@ def main1():
     ax5.set_xlim(-1, 5)
     ax5.set_xlabel('Freq [Hz]')
     ax5.set_ylabel('[dB]')
+
+    # distance
+    ax6 = fig.add_subplot(gs[3, 0])
+    length = np.linalg.norm(positions, axis=1)
+    sub_length = length[
+        cut_index * (int(fs / object_freq + 0.5)):(cut_index + n_period) * int(fs / object_freq + 0.5)]
+    ax6.plot(sub_times, 1000 * sub_length)
 
     plt.tight_layout()
     plt.show()
