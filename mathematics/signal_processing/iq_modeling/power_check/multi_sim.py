@@ -46,7 +46,8 @@ def generate_iq_wave_from_multi_objects(
 def generate_two_frequencies_at_n(
         times: NDArray, init_phases: list[float], delayed_phases: list[float], \
         displacements: list[float], omegas: list[float], order_n: int, order_m_max: int, \
-        wave_number: float, only_side: bool, ignore_dc: bool = True) -> NDArray:
+        wave_number: float, only_side: bool, ignore_dc: bool = True, pos_order_m: bool = False) \
+            -> NDArray:
     # only_side: 正 or 負の周波数のみ, order_n の符号に従う
     def my_sign(value: int|float) -> int:
         if value == 0:
@@ -60,7 +61,8 @@ def generate_two_frequencies_at_n(
     # order ms
     wave_ms = np.zeros_like(wave_n)
     wave_ms *= np.exp(1j * init_phases[1])
-    for m in range(-order_m_max, order_m_max + 1):
+    min_order_m = 0 if pos_order_m else -order_m_max
+    for m in range(min_order_m, order_m_max + 1):
         if only_side and (my_sign(order_n) * (order_n * omegas[0] + m * omegas[1]) < 0):
             continue
         if ignore_dc and (np.allclose(order_n * omegas[0] + m * omegas[1], 0.)):
@@ -90,7 +92,7 @@ def main():
     init_phases = [0.0 * (2 * np.pi), 0.25 * (2 * np.pi)]  # 物体までの距離依存 (同物体であれば同じ数値のはず)
     delayed_phases = [0., 0.0 * (2 * np.pi)]  # それぞれの位相ズレ
     displacements = [0.000_02, 0.000_2]  # 振幅 [m]
-    _frequencies = [1., 0.1]  # [Hz]
+    _frequencies = [1., 0.2]  # [Hz]
     omegas = [2 * np.pi * f for f in _frequencies]
     # time
     start_time = 0.
@@ -103,17 +105,21 @@ def main():
 
     # iq wave
     only_side_freq = True
-    order_ns = [1, 2, 3, 4]
+    order_ns = [2, 3, 4]
     minus_order_ns = [-v for v in order_ns]
-    order_m_max = 3
+    order_m_max = 2
     iq_wave = np.zeros(times.shape, dtype=np.complex128)
     for _order_n in order_ns:
-        tmp_wave = generate_two_frequencies_at_n(times, init_phases, delayed_phases, displacements, omegas, _order_n, order_m_max, WAVE_NUMBER, only_side_freq)
+        tmp_wave = generate_two_frequencies_at_n(
+            times, init_phases, delayed_phases, displacements, omegas, _order_n, order_m_max,
+            WAVE_NUMBER, only_side_freq, pos_order_m=True)
         iq_wave += tmp_wave
 
     minus_f_iq_wave = np.zeros(times.shape, dtype=np.complex128)
     for _order_n in minus_order_ns:
-        tmp_wave = generate_two_frequencies_at_n(times, init_phases, delayed_phases, displacements, omegas, _order_n, order_m_max, WAVE_NUMBER, only_side_freq)
+        tmp_wave = generate_two_frequencies_at_n(
+            times, init_phases, delayed_phases, displacements, omegas, _order_n, order_m_max,
+            WAVE_NUMBER, only_side_freq, pos_order_m=True)
         minus_f_iq_wave += tmp_wave
 
     # fft
@@ -128,7 +134,7 @@ def main():
     ds_iq_power = double_side_iq * double_side_iq.conj()
 
     # cut wave
-    plot_proces_time = 10.
+    plot_proces_time = 20.
     plot_start_time = 0.
     plot_end_time = plot_start_time + plot_proces_time
     plot_start_index = int(fs * plot_start_time)
