@@ -14,6 +14,8 @@ from scipy.special import jn
 from numpy.lib.stride_tricks import sliding_window_view
 from numpy.typing import NDArray
 
+from extended_hilbert_transform import reconstruct_phase_from_analytic_signal
+
 
 LIGHT_SPEED = 3.e8
 SENSOR_FREQ = 24.e9
@@ -122,9 +124,9 @@ def apply_highpass_filter(
 def main():
     # objects
     init_phases = [0., 0.]  # 物体までの距離依存 (同物体であれば同じ数値のはず)
-    delayed_phases = [0., 0.5 * (2 * np.pi)]  # それぞれの位相ズレ
-    displacements = [0.000_1, 0.000_01]  # 振幅 [m]
-    _frequencies = [0.25, 1.]  # [Hz]
+    delayed_phases = [0., 0.25 * (2 * np.pi)]  # それぞれの位相ズレ
+    displacements = [0.001_0, 0.000_1]  # 振幅 [m]
+    _frequencies = [0.2, 1.]  # [Hz]
     omegas = [2 * np.pi * f for f in _frequencies]
     # iq wave
     start_time = 0.
@@ -141,9 +143,13 @@ def main():
 
     # extract positive frequencies
     # iq_positive_frequency = remove_negative_frequency(iq_wave_minus_mean)
-    iq_positive_frequency = extract_specified_frequency(iq_wave_minus_mean, (3.5, 10.5), fs)
+    iq_positive_frequency = extract_specified_frequency(iq_wave_minus_mean, (2., 2.8), fs)
     positive_amp = np.abs(iq_positive_frequency)
     positive_phase, positive_diff_phase = generate_phase_from_iq(iq_positive_frequency, 5)
+
+    modified_phase, modified_outliers = reconstruct_phase_from_analytic_signal(iq_positive_frequency, tau=1/fs)
+    modified_phase_modulation = np.r_[0., np.diff(modified_phase)]
+    print(modified_outliers)
 
     # frequency powers
     fft_abs, fft_freq = extract_frequency_info(iq_positive_frequency, fs)
@@ -167,6 +173,7 @@ def main():
     ax2 = ax1.twinx()
     ax1.plot(times, positive_amp, c='C0', alpha=0.5, label='amp')
     ax2.plot(times, positive_diff_phase, c='C1', alpha=0.5, label='diff phase')
+    ax2.plot(times, modified_phase_modulation, c='C2', alpha=0.5, label='extended diff phase')
     ax1.legend()
     ax2.legend()
 
