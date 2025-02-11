@@ -22,6 +22,50 @@ SENSOR_FREQ = 24.e9
 WAVE_NUMBER = 2 * np.pi / (LIGHT_SPEED / SENSOR_FREQ)
 
 
+def signed_coherence_from_fft(x: NDArray, fs: int):
+    N = len(x)
+    if N % 2 != 0:
+        raise ValueError("data length must be even")
+
+    # FFT を計算
+    X = np.fft.fft(x * np.hanning(N))
+    # 周波数軸の計算
+    freqs = np.fft.fftfreq(N, d=1/fs)
+
+    # 正の周波数に対応するインデックス：k = 1, 2, ..., N//2 - 1
+    pos_indices = np.arange(1, N//2)
+    # 対応する負の周波数はインデックス N - k
+    neg_indices = N - pos_indices
+
+    # 正の成分と対応する負の成分
+    X_pos = X[pos_indices]
+    X_neg = X[neg_indices]
+    abs_x_pos = np.abs(X_pos)
+    abs_x_neg = np.abs(X_neg)
+
+    # ピークのみ求める
+    valid_index1 = np.r_[(abs_x_pos[:-1] > abs_x_pos[1:]), False]
+    valid_index2 = np.r_[False, (abs_x_pos[1:] > abs_x_pos[:-1])]
+    valid_index = valid_index1 * valid_index2
+    # plt.plot(freqs[pos_indices], abs_x_pos)
+    # plt.scatter(freqs[pos_indices][valid_index], abs_x_pos[valid_index], c='red', s=10)
+    # plt.xlim(0, 5.)
+    # plt.show()
+
+    # 複素正規化クロススペクトル
+    C_complex = (X_pos[valid_index] * np.conjugate(X_neg[valid_index])) / (abs_x_pos[valid_index] * abs_x_neg[valid_index])
+
+    # signed coherence はその実部
+    C_real = np.real(C_complex)
+    # 位相差 (radians)
+    phase = np.angle(C_complex)
+
+    # 対応する周波数軸: f = k * fs / N
+    f = freqs[pos_indices][valid_index]
+
+    return f, C_real, phase
+
+
 def generate_iq_wave(
         times: NDArray, init_phase: float, delayed_phase: float,
         displacement: float, omega: float, wave_number: float) -> NDArray[np.complex128]:
@@ -184,5 +228,39 @@ def main():
     plt.show()
 
 
+def coherence_trial():
+    # objects
+    init_phases = [0., 0.]  # 物体までの距離依存 (同物体であれば同じ数値のはず)
+    delayed_phases = [0., 1. * (2 * np.pi)]  # それぞれの位相ズレ
+    displacements = [0.001_0, 0.000_1]  # 振幅 [m]
+    _frequencies = [0.1, 1.]  # [Hz]
+    omegas = [2 * np.pi * f for f in _frequencies]
+    # iq wave
+    start_time = 0.
+    end_time = 30.
+    fs = 100
+    times = generate_time(start_time, end_time, fs)
+    iq_wave = generate_iq_wave_from_multi_objects(
+        times, init_phases, delayed_phases, displacements, omegas, WAVE_NUMBER)
+
+    # coherence
+    coherence_freq, corehences, phase = signed_coherence_from_fft(iq_wave, fs)
+
+    # fft
+    fft_abs, fft_freq = extract_frequency_info(iq_wave, fs)
+    fft_positive_freq = fft_freq[fft_freq >= 0]
+    fft_positive_abs = fft_abs[fft_freq >= 0]
+
+    _, ax = plt.subplots(1, 1)
+    ax2 = ax.twinx()
+    ax.plot(fft_positive_freq, fft_positive_abs, alpha=0.5)
+    ax2.scatter(coherence_freq, corehences, color='pink', s=10)
+    ax.set_xlim(-0.5, 10.)
+    ax2.set_xlim(-0.5, 10.)
+    ax.set_yscale('log')
+    plt.show()
+
+
 if __name__ == '__main__':
-    main()
+    # main()
+    coherence_trial()
