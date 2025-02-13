@@ -97,7 +97,7 @@ def generate_iq_wave_from_multi_objects(
 
 
 def extract_frequency_info(data: NDArray, fs: int) -> tuple[NDArray, NDArray]:
-    fft_value = np.fft.fftshift(np.fft.fft(data))
+    fft_value = np.fft.fftshift(np.fft.fft(data * np.hanning(len(data))))
     fft_freq = np.fft.fftshift(np.fft.fftfreq(len(fft_value), d=1/fs))
     fft_abs = np.abs(fft_value) / len(data)
     return fft_abs, fft_freq
@@ -125,6 +125,45 @@ def extract_specified_frequency(data: NDArray, ranges: tuple[float, float], fs: 
     fft_value[indices] = 0.
     reconstructed = np.fft.ifft(fft_value)
     return reconstructed
+
+
+def extract_side_band_frequency(
+        data: NDArray, fs: int, f_low: float, f_high: float, order: int = 4) -> NDArray:
+    # 時刻軸の生成
+    t = np.arange(len(data)) / fs
+
+    # 帯域の中心周波数と半帯域幅の計算
+    fc = (f_low + f_high) / 2.0
+
+    # (1) 搬送波による周波数シフト：対象帯域をベースバンドに移動
+    shifted = data * np.exp(-1j * 2 * np.pi * fc * t)
+
+    # (2) 低域通過 IIR フィルタの設計：カットオフ周波数を半帯域幅に設定
+    sos = _make_filter(fs, f_low, f_high, order)
+
+    # フィルタ適用
+    filtered = signal.sosfiltfilt(sos, shifted)
+
+    # (3) 逆搬送波で元の周波数位置に戻す
+    result = filtered * np.exp(1j * 2 * np.pi * fc * t)
+    return result
+
+
+def sideband_freqz(fs: int, f_low: float, f_high: float, order: int):
+    sos = _make_filter(fs, f_low, f_high, order)
+    w, h = signal.sosfreqz(sos, worN=2000, fs=fs)
+    w2 = np.r_[-w[::-1][:-1], w]
+    h2 = np.r_[h[::-1][:-1], h]
+    w2 = w2 + (f_low + f_high) / 2.0
+    return w2, h2
+
+
+def _make_filter(fs: int, f_low: float, f_high: float, order: int):
+    nyquist = fs / 2.0
+    bw_half = (f_high - f_low) / 2.0
+    norm_cutoff = bw_half / nyquist  # 正規化カットオフ周波数
+    sos = signal.butter(order, norm_cutoff, btype='lowpass', output='sos')
+    return sos
 
 
 def generate_phase_from_iq(data: NDArray, movemean_size: int = 0) -> tuple[NDArray, NDArray]:
@@ -168,13 +207,13 @@ def apply_highpass_filter(
 def main():
     # objects
     init_phases = [0., 0.]  # 物体までの距離依存 (同物体であれば同じ数値のはず)
-    delayed_phases = [0., 0.25 * (2 * np.pi)]  # それぞれの位相ズレ
+    delayed_phases = [0., 0.5 * (2 * np.pi)]  # それぞれの位相ズレ
     displacements = [0.001_0, 0.000_1]  # 振幅 [m]
     _frequencies = [0.2, 1.]  # [Hz]
     omegas = [2 * np.pi * f for f in _frequencies]
     # iq wave
     start_time = 0.
-    end_time = 20.
+    end_time = 60.
     fs = 100
     times = generate_time(start_time, end_time, fs)
     iq_wave = generate_iq_wave_from_multi_objects(
@@ -186,8 +225,10 @@ def main():
     # iq_wave_minus_mean, _ = apply_highpass_filter(iq_wave, 0.1, fs, 4, zero_phase=False)
 
     # extract positive frequencies
+    f_low, f_high = 6.2, 10.
     # iq_positive_frequency = remove_negative_frequency(iq_wave_minus_mean)
-    iq_positive_frequency = extract_specified_frequency(iq_wave_minus_mean, (2., 2.8), fs)
+    # iq_positive_frequency = extract_specified_frequency(iq_wave_minus_mean, (f_low, f_high), fs)
+    iq_positive_frequency = extract_side_band_frequency(iq_wave_minus_mean, fs, f_low, f_high, order=5)
     positive_amp = np.abs(iq_positive_frequency)
     positive_phase, positive_diff_phase = generate_phase_from_iq(iq_positive_frequency, 5)
 
@@ -197,23 +238,23 @@ def main():
 
     # frequency powers
     fft_abs, fft_freq = extract_frequency_info(iq_positive_frequency, fs)
-    min_freq = -5.
-    max_freq = 5.
+    min_freq = -10.
+    max_freq = 10.
 
     # plot
     plt.figure(figsize=(12, 8))
-    plt.subplot(2, 2, 1)
+    plt.subplot(3, 2, 1)
     plt.plot(times, iq_wave.real, alpha=0.5)
     plt.plot(times, iq_wave.imag, alpha=0.5)
     plt.plot(times, iq_positive_frequency.real, alpha=0.5)
     plt.plot(times, iq_positive_frequency.imag, alpha=0.5)
 
-    plt.subplot(2, 2, 2)
+    plt.subplot(3, 2, 2)
     plt.plot(fft_freq, fft_abs)
     plt.xlim(min_freq, max_freq)
     # plt.yscale('log')
 
-    ax1 = plt.subplot(2, 2, 3)
+    ax1 = plt.subplot(3, 2, 3)
     ax2 = ax1.twinx()
     ax1.plot(times, positive_amp, c='C0', alpha=0.5, label='amp')
     ax2.plot(times, positive_diff_phase, c='C1', alpha=0.5, label='diff phase')
@@ -221,9 +262,13 @@ def main():
     ax1.legend()
     ax2.legend()
 
-    plt.subplot(2, 2, 4)
+    plt.subplot(3, 2, 4)
     plt.plot(times, iq_positive_frequency.real, alpha=0.5)
     plt.plot(times, iq_positive_frequency.imag, alpha=0.5)
+
+    w, h = sideband_freqz(fs, f_low, f_high, order=5)
+    plt.subplot(3, 2, 5)
+    plt.plot(w, 20 * np.log10(np.abs(h) + 1e-6))
 
     plt.show()
 
@@ -262,5 +307,5 @@ def coherence_trial():
 
 
 if __name__ == '__main__':
-    # main()
-    coherence_trial()
+    main()
+    # coherence_trial()
