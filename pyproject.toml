@@ -25,4 +25,5 @@ dependencies = [
     "dearpygui>=2.0.0",
     "tkeasygui>=1.0.21",
     "pytk>=0.0.2.1",
+    "celery>=5.5.0",
 ]
