@@ -26,4 +26,5 @@ dependencies = [
     "tkeasygui>=1.0.21",
     "pytk>=0.0.2.1",
     "celery>=5.5.0",
+    "pydmd>=2025.5.1",
 ]
