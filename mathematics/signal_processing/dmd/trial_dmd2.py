@@ -125,17 +125,16 @@ def main():
 
     _, ax = plt.subplots(figsize=(8, 4))
     for i, one_phi in enumerate(phi.T):
-        ax.plot(one_phi, alpha=0.5, label=str(i))
+        ax.plot(one_phi.real, alpha=0.5, label=str(i))
     ax.legend()
 
     _, ax = plt.subplots(figsize=(8, 4))
     ax.plot(times, data)
-    ax.plot(times, reconstructed[:len(times)])
+    ax.plot(times, reconstructed[:len(times)].real)
 
     for sub_wave in x_t_recon:
-        ax.plot(times, sub_wave[:len(times)], alpha=0.5)
+        ax.plot(times, sub_wave[:len(times)].real, alpha=0.5)
     plt.show()
-
 
     # A
     lowers = 5
@@ -162,10 +161,10 @@ def main():
 
     _, ax = plt.subplots(figsize=(8, 4))
     ax.plot(times, data)
-    ax.plot(times, reconstructed[:len(times)])
+    ax.plot(times, reconstructed[:len(times)].real)
 
     for sub_wave in x_t_recon:
-        ax.plot(times, sub_wave[:len(times)], alpha=0.5)
+        ax.plot(times, sub_wave[:len(times)].real, alpha=0.5)
     plt.show()
 
 
