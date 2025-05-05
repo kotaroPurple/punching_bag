@@ -38,6 +38,12 @@ def lower_svd(mat_u: NDArray, sigmas: NDArray, mat_vh: NDArray, rank: int) -> tu
     return mat_u[:, :rank], sigmas[:rank], mat_vh[:rank, :]
 
 
+def make_eigen_info(mat: NDArray) -> tuple[NDArray, NDArray]:
+    # eigens are sorted (np.abs(eigens): descending)
+    eigens, eigen_vectors = np.linalg.eig(mat)
+    return eigens, eigen_vectors
+
+
 def main():
     data, trend, periodic1, periodic2, noise, times = make_data()
 
@@ -63,16 +69,6 @@ def main():
     low_rank = 5
     low_u, low_sigmas, low_vh = lower_svd(_U, _S, _Vh, rank=low_rank)
 
-    # lower_x = low_u @ np.diag(low_sigmas) @ low_vh
-    # diff_x = np.abs(mat_x - lower_x)
-
-    # _flatten_x = flatten_hankel_matrix(mat_x)
-    # _flatten_lower_x = flatten_hankel_matrix(lower_x)
-
-    # plt.plot(_flatten_x)
-    # plt.plot(_flatten_lower_x)
-    # plt.show()
-
     # A
     low_v = conjugate_transpose(low_vh)
     low_uh = conjugate_transpose(low_u)
@@ -80,9 +76,15 @@ def main():
     mat_a_tilda = low_uh @ mat_y @ low_v @ inv_low_sigma
     eigens, eigen_vectors = np.linalg.eig(mat_a_tilda)
 
+    # predict A
+    predicted_a = low_u @ mat_a_tilda @ low_uh  # (L,L)
+
+    make_eigen_info(predicted_a)
+
     print()
     print('---- A_tilda ----')
     print(f'{mat_a_tilda.shape=}')
+    print(f'{predicted_a.shape=}')
 
     # frequency
     dt = times[1] - times[0]
@@ -129,6 +131,41 @@ def main():
     _, ax = plt.subplots(figsize=(8, 4))
     ax.plot(times, data)
     ax.plot(times, reconstructed[:len(times)])
+
+    for sub_wave in x_t_recon:
+        ax.plot(times, sub_wave[:len(times)], alpha=0.5)
+    plt.show()
+
+
+    # A
+    lowers = 5
+    eigens, eigen_vectors = make_eigen_info(predicted_a)
+    eigens = eigens[:lowers]
+    eigen_vectors = eigen_vectors[:, :lowers]
+    predicted_b = np.linalg.solve(eigen_vectors.T @ eigen_vectors, eigen_vectors.T @ mat_x[:, 0])
+
+    x_t_list = []
+    for idx, mu_elem in enumerate(eigens):
+        x_t = []
+        for t_ in times:
+            x_t.append(eigen_vectors[:, idx] * np.exp(np.log(mu_elem) / dt * t_) * predicted_b[idx])
+        x_t = np.array(x_t).T  # (L, T)
+        x_t_list.append(x_t)
+
+    # Convert Hankel matrix to time-series
+    x_t_recon = []
+    for x_t in x_t_list:
+        x_t_recon.append(flatten_hankel_matrix(x_t))
+        # x_t_recon.append(x_t[0, :])
+    x_t_recon = np.array(x_t_recon)
+    reconstructed = x_t_recon.sum(axis=0)
+
+    _, ax = plt.subplots(figsize=(8, 4))
+    ax.plot(times, data)
+    ax.plot(times, reconstructed[:len(times)])
+
+    for sub_wave in x_t_recon:
+        ax.plot(times, sub_wave[:len(times)], alpha=0.5)
     plt.show()
 
 
