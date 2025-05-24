@@ -103,6 +103,33 @@ def apply_standard_dmd(
     return eigens, mat_phi, amps
 
 
+def predict_matrix_a_by_dmd(
+        mat_y: NDArray, svd_u: NDArray, svd_sigmas: NDArray, svd_vh: NDArray,
+        low_rank: int) -> NDArray:
+    """Dynamic Mode Decomposition を行う
+
+    Args:
+        mat_y (NDArray): Y in (Y=AX)
+        svd_u (NDArray): U in X=U.S.Vh
+        svd_sigmas (NDArray): diagonal S in X=U.S.Vh
+        svd_vh (NDArray): Vh in X=U.S.Vh
+        low_rank (int): 低ランク基準
+
+    Returns:
+        NDArray: 行列A
+    """
+    # 低ランク化
+    low_u, low_sigmas, low_vh = lower_svd(svd_u, svd_sigmas, svd_vh, low_rank)
+    # A~
+    low_uh = conjugate_transpose(low_u)
+    low_v = conjugate_transpose(low_vh)
+    inv_sigma = np.diag(1. / low_sigmas)
+    a_tilda = low_uh @ mat_y @ low_v @ inv_sigma
+    # matrix a
+    mat_a = low_u @ a_tilda @ low_uh
+    return mat_a
+
+
 def reconstruct_by_dmd(
         mat_a_eigens: NDArray, mat_phi: NDArray, amps: NDArray, times: NDArray) -> tuple[NDArray, list[NDArray]]:
     """DMD結果から波形を再構成する
@@ -127,41 +154,3 @@ def reconstruct_by_dmd(
         wave_list.append(flatten_hankel_matrix(xs)[:size])
     reconstructed = np.sum(np.array(wave_list), axis=0)
     return reconstructed, wave_list
-
-
-# def make_data(seed: int = 123) -> list[NDArray]:
-#     np.random.seed(seed)
-#     number = 400
-#     process_time = 1.0
-#     t_raw = np.linspace(0, process_time, number)
-#     trend = 10 * (t_raw - process_time) ** 2
-#     periodic1 = np.sin(10 * 2 * np.pi * t_raw) / np.exp(-2 * t_raw)
-#     periodic2 = np.sin(20 * 2 * np.pi * t_raw)
-#     noise = 1.5 * (np.random.rand(number) - 0.5)
-#     data = trend + periodic1 + periodic2 + noise
-#     return [data, trend, periodic1, periodic2, noise, t_raw]
-
-
-# data, trend, periodic1, periodic2, noise, times = make_data()
-
-# window_size = 70
-# hankel_mat = make_hankel_matrix(data, window_size)
-# mat_x = hankel_mat[:, :-1]
-# mat_y = hankel_mat[:, 1:]
-
-# # SVD
-# _U, _S, _Vh = np.linalg.svd(mat_x)
-
-# eigens, mat_phi, amps = apply_standard_dmd(mat_x, mat_y, _U, _S, _Vh, 5)
-# reconstructed, wave_list = reconstruct_by_dmd(eigens, mat_phi, amps, times)
-
-# import matplotlib.pyplot as plt
-
-# plt.plot(times, data)
-# plt.plot(times, reconstructed)
-
-# for one_wave in wave_list:
-#     plt.plot(times, one_wave, alpha=0.5)
-
-# plt.show()
-
