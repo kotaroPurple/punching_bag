@@ -154,3 +154,13 @@ def reconstruct_by_dmd(
         wave_list.append(flatten_hankel_matrix(xs)[:size])
     reconstructed = np.sum(np.array(wave_list), axis=0)
     return reconstructed, wave_list
+
+
+def hankel_to_signal(hankel_mat: NDArray) -> NDArray:
+    n_rows, n_cols = hankel_mat.shape
+    row_mat = np.arange(n_rows)[:, None]
+    col_mat = np.arange(n_cols)[None, :]
+    indices = (row_mat + col_mat).ravel()
+    sums   = np.bincount(indices, weights=hankel_mat.ravel().real, minlength=n_rows + n_cols - 1)
+    counts = np.bincount(indices, minlength=n_rows + n_cols - 1)
+    return sums / counts

@@ -11,11 +11,10 @@ def main() -> None:
     data_list = generate_data(mode=0)
     data = data_list[0]
     times = data_list[-1]
-    print(f'{data.shape=}')
 
     # Online DMD
     window_size = 70
-    remain_size = 10
+    remain_size = 1
     first_size = len(data) - remain_size
     first_data = data[:first_size]
     remain_data = data[first_size:]
@@ -26,7 +25,7 @@ def main() -> None:
     for one_data in remain_data:
         dmd.update(one_data)
 
-    wave_list = dmd.reconstruct(valid_number=6, time_index=len(data))
+    wave_list = dmd.reconstruct(valid_number=6, time_index=len(data) - window_size + 1)
     reconstructed = np.sum(np.array(wave_list), axis=0)
 
     for i, one_wave in enumerate(wave_list):
