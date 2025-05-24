@@ -2,7 +2,7 @@
 import numpy as np
 from numpy.typing import NDArray
 
-from core import (make_hankel_matrix, apply_svd)
+from core import (make_hankel_matrix, apply_svd, hankel_to_signal)
 
 # * initialize
 #   - DMD
@@ -13,12 +13,6 @@ from core import (make_hankel_matrix, apply_svd)
 #   - update Q, P, A
 #   - eigen, eigen vectors from A
 #   - get modes, amplitudes
-
-
-# def _predict_matrix_a(mat_x: NDArray, mat_y: NDArray, low_rank: int) -> NDArray:
-#     svd_u, svd_sigmas, svd_vh = apply_svd(mat_x)
-#     mat_a = predict_matrix_a_by_dmd(mat_y, svd_u, svd_sigmas, svd_vh, low_rank)
-#     return mat_a
 
 
 def _predict_p_and_q_matrix(mat_x: NDArray, mat_y: NDArray) -> tuple[NDArray, NDArray]:
@@ -81,6 +75,9 @@ class OnlineDmd:
         wave_list = []
         # main
         for i in range(valid_number):
-            xs = phi_mat[0, i] * bn[i] * (1 / (eigens[i] ** np.arange(time_index)[::-1]))
+            phi_i = phi_mat[:, [i]]
+            coeff = bn[i] * (1 / (eigens[i] ** np.arange(time_index)[::-1]))
+            hankel_mat = phi_i @ coeff[None, :]
+            xs = hankel_to_signal(hankel_mat)
             wave_list.append(xs)
         return wave_list
