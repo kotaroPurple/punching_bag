@@ -81,3 +81,17 @@ class OnlineDmd:
             xs = hankel_to_signal(hankel_mat)
             wave_list.append(xs)
         return wave_list
+
+    def reconstruct_from_start(
+            self, start_vec: NDArray, valid_number: int, time_index: int) -> list[NDArray]:
+        eigens, phi_mat = np.linalg.eig(self._mat_a)
+        bn = np.linalg.solve(phi_mat.T @ phi_mat, phi_mat.T @ start_vec)
+        wave_list = []
+        # main
+        for i in range(valid_number):
+            phi_i = phi_mat[:, [i]]
+            coeff = bn[i] * (eigens[i] ** np.arange(time_index))
+            hankel_mat = phi_i @ coeff[None, :]
+            xs = hankel_to_signal(hankel_mat)
+            wave_list.append(xs)
+        return wave_list
