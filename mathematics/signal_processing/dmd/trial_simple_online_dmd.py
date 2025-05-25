@@ -14,7 +14,7 @@ def main() -> None:
 
     # Online DMD
     window_size = 70
-    remain_size = 1
+    remain_size = 50
     first_size = len(data) - remain_size
     first_data = data[:first_size]
     remain_data = data[first_size:]
@@ -26,6 +26,17 @@ def main() -> None:
         dmd.update(one_data)
 
     wave_list = dmd.reconstruct(valid_number=6, time_index=len(data) - window_size + 1)
+    reconstructed = np.sum(np.array(wave_list), axis=0)
+
+    for i, one_wave in enumerate(wave_list):
+        plt.plot(times, one_wave[:len(data)], alpha=0.5, label=f'sub {i}')
+    plt.plot(times, reconstructed[:len(data)], alpha=0.5, c='red', label='reconstruted')
+    plt.plot(times, data, alpha=0.5, c='black', label='original')
+    plt.legend()
+    plt.show()
+
+    wave_list = dmd.reconstruct_from_start(
+        start_vec=data[:window_size], valid_number=6, time_index=len(data) - window_size + 1)
     reconstructed = np.sum(np.array(wave_list), axis=0)
 
     for i, one_wave in enumerate(wave_list):
