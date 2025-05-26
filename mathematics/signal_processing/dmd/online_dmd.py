@@ -14,6 +14,9 @@ from core import (make_hankel_matrix, apply_svd, hankel_to_signal)
 #   - eigen, eigen vectors from A
 #   - get modes, amplitudes
 
+def _hermitian(mat_data: NDArray) -> NDArray:
+    return np.conjugate(mat_data.T)
+
 
 def _predict_p_and_q_matrix(mat_x: NDArray, mat_y: NDArray) -> tuple[NDArray, NDArray]:
     # Q = Y.(XT)
@@ -23,7 +26,7 @@ def _predict_p_and_q_matrix(mat_x: NDArray, mat_y: NDArray) -> tuple[NDArray, ND
     #      = U.S.ST.UT
     # (X.XT)^(-1) = U.(S^(-2)).UT
     svd_u, svd_sigmas, _ = apply_svd(mat_x)
-    mat_p = svd_u @ np.diag(1. / (svd_sigmas**2)) @ svd_u.T
+    mat_p = svd_u @ np.diag(1. / (svd_sigmas**2)) @ _hermitian(svd_u)
     return mat_p, mat_q
 
 
@@ -71,7 +74,7 @@ class OnlineDmd:
 
     def reconstruct(self, valid_number: int, time_index: int) -> list[NDArray]:
         eigens, phi_mat = np.linalg.eig(self._mat_a)
-        bn = np.linalg.solve(phi_mat.T @ phi_mat, phi_mat.T @ self._last_array)
+        bn = np.linalg.solve(_hermitian(phi_mat) @ phi_mat, _hermitian(phi_mat) @ self._last_array)
         wave_list = []
         # main
         for i in range(valid_number):
@@ -85,7 +88,7 @@ class OnlineDmd:
     def reconstruct_from_start(
             self, start_vec: NDArray, valid_number: int, time_index: int) -> list[NDArray]:
         eigens, phi_mat = np.linalg.eig(self._mat_a)
-        bn = np.linalg.solve(phi_mat.T @ phi_mat, phi_mat.T @ start_vec)
+        bn = np.linalg.solve(_hermitian(phi_mat) @ phi_mat, _hermitian(phi_mat) @ start_vec)
         wave_list = []
         # main
         for i in range(valid_number):
