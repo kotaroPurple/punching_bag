@@ -1,4 +1,7 @@
 
+# DB
+*.db
+
 # hydra
 outputs/
 
