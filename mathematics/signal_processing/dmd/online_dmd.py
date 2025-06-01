@@ -2,30 +2,24 @@
 import numpy as np
 from numpy.typing import NDArray
 
-from core import (make_hankel_matrix, apply_svd, hankel_to_signal)
+from core import (make_hankel_matrix, apply_svd, lower_svd, hankel_to_signal)
 
-# * initialize
-#   - DMD
-#   - A = Y.(XT) . (X.XT)^(-1)
-#   -   = Q . P
-# * update
-#   - input new data: y_n, x_n
-#   - update Q, P, A
-#   - eigen, eigen vectors from A
-#   - get modes, amplitudes
 
 def _hermitian(mat_data: NDArray) -> NDArray:
     return np.conjugate(mat_data.T)
 
 
-def _predict_p_and_q_matrix(mat_x: NDArray, mat_y: NDArray) -> tuple[NDArray, NDArray]:
+def _predict_p_and_q_matrix(mat_x: NDArray, mat_y: NDArray, threshold: float) -> tuple[NDArray, NDArray]:
     # Q = Y.(XT)
     mat_q = mat_y @ mat_x.T
     # P = (X.(XT))^(-1)
     # X.XT = (U.S.Vh).(VhT.ST.UT)
     #      = U.S.ST.UT
     # (X.XT)^(-1) = U.(S^(-2)).UT
-    svd_u, svd_sigmas, _ = apply_svd(mat_x)
+    svd_u, svd_sigmas, svd_vh = apply_svd(mat_x)
+    # 低ランク近似
+    svd_u, svd_sigmas, _ = lower_svd(
+        svd_u, svd_sigmas, svd_vh, rank=-1, threshold=threshold)
     mat_p = svd_u @ np.diag(1. / (svd_sigmas**2)) @ _hermitian(svd_u)
     return mat_p, mat_q
 
@@ -52,13 +46,13 @@ class OnlineDmd:
     def __init__(self, window_size: int) -> None:
         self._window_size = window_size
 
-    def set_initial_data(self, data_array: NDArray) -> None:
+    def set_initial_data(self, data_array: NDArray, low_rank_threshold: float) -> None:
         hankel_mat = make_hankel_matrix(data_array, self._window_size)
         mat_x = hankel_mat[:, :-1]
         mat_y = hankel_mat[:, 1:]
-        self._mat_p, self._mat_q = _predict_p_and_q_matrix(mat_x, mat_y)
+        self._mat_p, self._mat_q = _predict_p_and_q_matrix(
+            mat_x, mat_y, low_rank_threshold)
         self._mat_a = _calculate_a_matrix(self._mat_p, self._mat_q)
-
         # keep the last col
         self._last_array = mat_y[:, -1]
 

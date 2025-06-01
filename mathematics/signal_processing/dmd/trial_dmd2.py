@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from numpy.typing import NDArray
 
 from core import make_hankel_matrix, apply_svd, apply_standard_dmd, reconstruct_by_dmd
+from util import generate_data
 
 
 def make_data(seed: int = 123) -> list[NDArray]:
@@ -22,19 +23,24 @@ def make_data(seed: int = 123) -> list[NDArray]:
 
 
 def main():
-    data, trend, periodic1, periodic2, noise, times = make_data()
+    # data option
+    mode = 1
+    data_list = generate_data(mode)
+    data = data_list[0]
+    times = data_list[-1]
+    if mode == 0:
+        window_size = 70
+    elif mode == 1:
+        window_size = 100
+        data = data[:len(data)//3]
+        times = times[:len(times)//3]
 
-    window_size = 70
     hankel_mat = make_hankel_matrix(data, window_size)
     mat_x = hankel_mat[:, :-1]
     mat_y = hankel_mat[:, 1:]
 
     # SVD
     _U, _S, _Vh = apply_svd(mat_x)
-    # sigma_sumsq = (_S ** 2).sum()
-    # sigma_array = (_S ** 2) / sigma_sumsq
-    # cumlative_contrib = (_S ** 2).cumsum() / sigma_sumsq * 100.
-
 
     # DMD
     low_rank = 5

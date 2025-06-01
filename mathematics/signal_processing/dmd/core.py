@@ -57,7 +57,9 @@ def apply_svd(mat_data: NDArray) -> tuple[NDArray, NDArray, NDArray]:
     return u_mat, sigmas, vh_mat
 
 
-def lower_svd(mat_u: NDArray, sigmas: NDArray, mat_vh: NDArray, rank: int) -> tuple[NDArray, NDArray, NDArray]:
+def lower_svd(
+        mat_u: NDArray, sigmas: NDArray, mat_vh: NDArray, rank: int = 0,
+        threshold: float = 0.95) -> tuple[NDArray, NDArray, NDArray]:
     """SVD の結果に対して低ランク化する
 
     Args:
@@ -65,11 +67,20 @@ def lower_svd(mat_u: NDArray, sigmas: NDArray, mat_vh: NDArray, rank: int) -> tu
         sigmas (NDArray): 対角成分
         mat_vh (NDArray): Vh
         rank (int): 低ランク基準
+        threshold (float): 累積寄与率の閾値 (rank <= 0 指定で使用)
 
     Returns:
         tuple[NDArray, NDArray, NDArray]: U, sigmas, Vh
     """
-    return mat_u[:, :rank], sigmas[:rank], mat_vh[:rank, :]
+    # rank が指定されていればそれを返す
+    if rank >= 1:
+        return mat_u[:, :rank], sigmas[:rank], mat_vh[:rank, :]
+    # 累積寄与率から低ランクを判断する
+    else:
+        variance = sigmas ** 2
+        cumulated = np.cumsum(variance) / variance.sum()
+        _rank = np.searchsorted(cumulated, threshold, side='left') + 1
+        return mat_u[:, :_rank], sigmas[:_rank], mat_vh[:_rank, :]
 
 
 def apply_standard_dmd(
