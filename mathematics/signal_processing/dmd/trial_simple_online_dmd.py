@@ -7,25 +7,32 @@ from util import generate_data
 
 
 def main() -> None:
+    # mode option
+    mode = 1
     # data
-    data_list = generate_data(mode=0)
-    data = data_list[0]
-    times = data_list[-1]
+    data_list = generate_data(mode)
+    if mode == 0:
+        data = data_list[0]
+        times = data_list[-1]
+        window_size = 70
+    elif mode == 1:
+        data = data_list[0][:]
+        times = data_list[-1][:]
+        window_size = 100
 
     # Online DMD
-    window_size = 70
-    remain_size = 50
+    remain_size = len(data) // 2
     first_size = len(data) - remain_size
     first_data = data[:first_size]
     remain_data = data[first_size:]
 
     dmd = OnlineDmd(window_size)
-    dmd.set_initial_data(first_data)
+    dmd.set_initial_data(first_data, low_rank_threshold=0.99)
 
     for one_data in remain_data:
         dmd.update(one_data)
 
-    wave_list = dmd.reconstruct(valid_number=6, time_index=len(data) - window_size + 1)
+    wave_list = dmd.reconstruct(valid_number=5, time_index=len(data) - window_size + 1)
     reconstructed = np.sum(np.array(wave_list), axis=0)
 
     for i, one_wave in enumerate(wave_list):
