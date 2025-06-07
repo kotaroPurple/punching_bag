@@ -2,23 +2,25 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-from online_dmd import OnlineDmd
+from weighted_online_dmd import WeightedOnlineDmd
 from util import generate_data
 
 
 def main() -> None:
     # mode option
-    mode = 0
+    mode = 1
     # data
     data_list = generate_data(mode)
     if mode == 0:
         data = data_list[0]
         times = data_list[-1]
         window_size = 70
+        rho = 0.98
     elif mode == 1:
         data = data_list[0][:]
         times = data_list[-1][:]
         window_size = 100
+        rho = 0.98
 
     # Online DMD
     remain_size = len(data) // 2
@@ -26,7 +28,7 @@ def main() -> None:
     first_data = data[:first_size]
     remain_data = data[first_size:]
 
-    dmd = OnlineDmd(window_size)
+    dmd = WeightedOnlineDmd(window_size, rho=rho)
     dmd.set_initial_data(first_data, low_rank_threshold=0.99)
 
     for one_data in remain_data:
