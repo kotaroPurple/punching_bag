@@ -24,20 +24,6 @@ def _predict_p_and_q_matrix(mat_x: NDArray, mat_y: NDArray, threshold: float) ->
     return mat_p, mat_q
 
 
-def _calculate_next_q_matrix(mat_q: NDArray, vector_x: NDArray, vector_y: NDArray) -> NDArray:
-    # Q_next = Q + y.xT
-    return mat_q + np.outer(vector_y, vector_x)
-
-
-def _calculate_next_p_matrix(mat_p: NDArray, vector_x: NDArray):
-    # x: new array
-    # P_next = P - c.P.x.xT.P
-    # c = 1 / (1 + x.T.P.x)
-    c = 1. / (1 + vector_x @ mat_p @ vector_x)
-    next_p = mat_p - c * (mat_p @ np.outer(vector_x, vector_x) @ mat_p)
-    return next_p
-
-
 def _calculate_a_matrix(mat_p: NDArray, mat_q: NDArray) -> NDArray:
     return mat_q @ mat_p
 
@@ -50,17 +36,27 @@ def _valid_eigens(eigens: NDArray, threshold: float) -> int:
     return int(index)
 
 
-class OnlineDmd:
-    def __init__(self, window_size: int) -> None:
+class WeightedOnlineDmd:
+    def __init__(self, window_size: int, rho: float) -> None:
         self._window_size = window_size
+        self._rho = rho
+        if not (0 < rho <= 1):
+            raise ValueError("rho must be 0 < rho <= 1")
 
     def set_initial_data(self, data_array: NDArray, low_rank_threshold: float) -> None:
+        # A0, P0 を求める
         hankel_mat = make_hankel_matrix(data_array, self._window_size)
         mat_x = hankel_mat[:, :-1]
         mat_y = hankel_mat[:, 1:]
-        self._mat_p, self._mat_q = _predict_p_and_q_matrix(
+        # rho^(k-i) をかける
+        rhos = np.array([self._rho ** i for i in range(mat_x.shape[1])])[::-1]
+        mat_x = mat_x * rhos[None, :]
+        mat_y = mat_y * rhos[None, :]
+        #
+        _mat_p, self._mat_q = _predict_p_and_q_matrix(
             mat_x, mat_y, low_rank_threshold)
-        self._mat_a = _calculate_a_matrix(self._mat_p, self._mat_q)
+        self._mat_a = _calculate_a_matrix(_mat_p, self._mat_q)
+        self._mat_p = _mat_p / self._rho
         # keep the last col
         self._last_array = mat_y[:, -1]
 
@@ -68,9 +64,10 @@ class OnlineDmd:
         # 過去データの最後を更新する
         vector_x = self._last_array
         vector_y = np.r_[self._last_array[1:], new_data]
-        self._mat_q = _calculate_next_q_matrix(self._mat_q, vector_x, vector_y)
-        self._mat_p = _calculate_next_p_matrix(self._mat_p, vector_x)
-        self._mat_a = _calculate_a_matrix(self._mat_p, self._mat_q)
+        # 係数更新
+        coeff = 1. / (1. + vector_x.T @ self._mat_p @ vector_x)
+        self._mat_a = self._mat_a + coeff * np.outer((vector_y - self._mat_a @ vector_x), vector_x) @ self._mat_p
+        self._mat_p = 1. / self._rho * (self._mat_p - coeff * self._mat_p @ np.outer(vector_x, vector_x) @ self._mat_p)
         # update
         self._last_array = vector_y
 
@@ -91,8 +88,7 @@ class OnlineDmd:
         return wave_list
 
     def reconstruct_from_start(
-            self, start_vec: NDArray, valid_number: int, time_index: int,
-            threshold: float) -> list[NDArray]:
+            self, start_vec: NDArray, valid_number: int, time_index: int, threshold: float) -> list[NDArray]:
         eigens, phi_mat = np.linalg.eig(self._mat_a)
         bn = np.linalg.solve(_hermitian(phi_mat) @ phi_mat, _hermitian(phi_mat) @ start_vec)
         wave_list = []
