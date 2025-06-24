@@ -1,4 +1,7 @@
 
+# mac
+.DS_STORE
+
 # DB
 *.db
 
