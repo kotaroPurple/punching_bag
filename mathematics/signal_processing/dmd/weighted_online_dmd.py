@@ -79,9 +79,10 @@ class WeightedOnlineDmd:
         if valid_number <= 0:
             valid_number = _valid_eigens(eigens, threshold)
 
+        window_size = phi_mat.shape[0]
         for i in range(valid_number):
             phi_i = phi_mat[:, [i]]
-            coeff = bn[i] * (1 / (eigens[i] ** np.arange(time_index)[::-1]))
+            coeff = bn[i] * (1 / (eigens[i] ** np.arange(time_index - window_size + 1)[::-1]))
             hankel_mat = phi_i @ coeff[None, :]
             xs = hankel_to_signal(hankel_mat)
             wave_list.append(xs)
