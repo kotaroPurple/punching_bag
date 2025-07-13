@@ -50,7 +50,7 @@ def main() -> None:
     for i in range(n_blocks):
         input_data = remain_data[i * one_block:(i + 1) * one_block]
         for one_data in input_data:
-            dmd.update(one_data)
+            dmd.update(float(one_data))
         _reconstructed = reconstruct(dmd, len(input_data))
         reconstructed_list.append(_reconstructed)
 

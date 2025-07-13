@@ -60,7 +60,7 @@ class WeightedOnlineDmd:
         # keep the last col
         self._last_array = mat_y[:, -1]
 
-    def update(self, new_data: NDArray) -> None:
+    def update(self, new_data: float) -> None:
         # 過去データの最後を更新する
         vector_x = self._last_array
         vector_y = np.r_[self._last_array[1:], new_data]
