@@ -9,12 +9,12 @@ from numpy.typing import NDArray
 
 # ---------- Parameters ----------
 fs = 200
-T  = 40.0
+T  = 120.0
 t  = np.arange(0, T, 1/fs)
 N  = len(t)
 
 # Rates
-f_H = 1.   # heart
+f_H = 1.25   # heart
 f_R = 0.25  # respiration
 
 # Displacements and wavelength
@@ -78,9 +78,9 @@ def plot_spectra(freqs: NDArray[np.float64], Ps: list[NDArray[np.float64]], titl
     if len(labels) < len(Ps):
         labels.extend([''] * (len(Ps) - len(labels)))
     for P, label in zip(Ps, labels):
-        plt.plot(freqs, 10*np.log10(P + 1e-16), label=label, alpha=0.6)
+        plt.plot(freqs, 10*np.log10(P + 1e-16), label=label, alpha=0.4)
     for fm in fmarks:
-        plt.axvline(fm, linestyle='--')
+        plt.axvline(fm, linestyle='--', alpha=0.3, c='black')
     plt.xlim(0, 5.0)
     plt.xlabel("Frequency [Hz]")
     plt.ylabel("Power [dB]")
@@ -89,21 +89,23 @@ def plot_spectra(freqs: NDArray[np.float64], Ps: list[NDArray[np.float64]], titl
     plt.tight_layout()
 
 
-def plot_time(x, fs, title):
+def plot_time(x, fs, title, showing_range: float = 10.):
     plt.figure()
     tt = np.arange(len(x))/fs
-    keep = tt >= (tt[-1]-10)
+    keep = tt >= (tt[-1]-showing_range)
     plt.plot(tt[keep], x[keep].real if np.iscomplexobj(x) else x[keep])
     plt.xlabel("Time [s]")
     plt.ylabel("Amplitude")
-    plt.title(title + " (last 10 s)")
+    plt.title(title + f" (last {showing_range:.1f} s)")
     plt.tight_layout()
 
 
-def plot_times(xs: list[NDArray[np.complex128]], fs: int, title: str, labels: list[str] = []):
+def plot_times(
+        xs: list[NDArray[np.complex128]], fs: int, title: str, labels: list[str] = [],
+        showing_range: float = 10.):
     plt.figure(figsize=(12, 4))
     tt = np.arange(len(xs[0]))/fs
-    keep = tt >= (tt[-1]-10)
+    keep = tt >= (tt[-1]-showing_range)
 
     if len(labels) < len(xs):
         labels.extend([''] * (len(xs) - len(labels)))
@@ -112,7 +114,7 @@ def plot_times(xs: list[NDArray[np.complex128]], fs: int, title: str, labels: li
         plt.plot(tt[keep], x[keep].real if np.iscomplexobj(x) else x[keep], label=label, alpha=0.5)
     plt.xlabel("Time [s]")
     plt.ylabel("Amplitude")
-    plt.title(title + " (last 10 s)")
+    plt.title(title + f" (last {showing_range:.1f} s)")
     plt.legend()
     plt.tight_layout()
 
@@ -145,29 +147,34 @@ pB_sum = pB_pos + pB_neg
 pB_diff = pB_pos - pB_neg
 
 # ---------- Time plots ----------
+showing_range = 15.0
 plot_times(
     [normalize_signal(pH_all), normalize_signal(pH_diff), normalize_signal(pH_pos)], fs, "Heart-only",
-    labels=['|s - DC|^2 (even-only ~ 2 f_H)', '|s_+|^2 - |s_-|^2 (odd-only; shows f_H)', '|s_+|^2'])
+    labels=['|s - DC|^2 (even-only ~ 2 f_H)', '|s_+|^2 - |s_-|^2 (odd-only; shows f_H)', '|s_+|^2'], showing_range=showing_range)
     # labels=['|s - DC|^2 (even-only ~ 2 f_H)', '|s_+|^2 - |s_-|^2 (odd-only; shows f_H)', '|s_+|^2 + |s_-|^2 (odd-only; shows f_H)'])
 plot_times(
     [normalize_signal(pB_all), normalize_signal(pB_diff), normalize_signal(pB_pos)], fs, "Resp+Heart",
-    labels=['|s - DC|^2 (even + odd-odd; 2 f_R, f_R±f_H)', '|s_+|^2 - |s_-|^2 (odd-only; f_R and f_H)', '|s_+|^2'])
+    labels=['|s - DC|^2 (even + odd-odd; 2 f_R, f_R±f_H)', '|s_+|^2 - |s_-|^2 (odd-only; f_R and f_H)', '|s_+|^2'], showing_range=showing_range)
     # labels=['|s - DC|^2 (even + odd-odd; 2 f_R, f_R±f_H)', '|s_+|^2 - |s_-|^2 (odd-only; f_R and f_H)', '|s_+|^2 + |s_-|^2 (odd-only; f_R and f_H)'])
 
 # ---------- Spectra ----------
-fH_all,  PH_all  = power_spectrum(pH_all, fs, zp=4)
-fH_diff, PH_diff = power_spectrum(pH_diff, fs, zp=4)
-fH_pos, PH_pos = power_spectrum(pH_pos, fs, zp=4)
-fB_all,  PB_all  = power_spectrum(pB_all, fs, zp=4)
-fB_diff, PB_diff = power_spectrum(pB_diff, fs, zp=4)
-fB_pos, PB_pos = power_spectrum(pB_pos, fs, zp=4)
+zp = 2
+fH_all,  PH_all  = power_spectrum(normalize_signal(pH_all), fs, zp=zp)
+fH_diff, PH_diff = power_spectrum(normalize_signal(pH_diff), fs, zp=zp)
+fH_pos, PH_pos = power_spectrum(normalize_signal(pH_pos), fs, zp=zp)
+fB_all,  PB_all  = power_spectrum(normalize_signal(pB_all), fs, zp=zp)
+fB_diff, PB_diff = power_spectrum(normalize_signal(pB_diff), fs, zp=zp)
+fB_pos, PB_pos = power_spectrum(normalize_signal(pB_pos), fs, zp=zp)
 
 plot_spectra(
-    fH_all, [PH_all, PH_diff, PH_pos], "Heart-only: spectrum of |s - DC|^2",
+    fH_all, [PH_all, PH_diff, PH_pos], "Heart-only spectrum",
     fmarks=[f_H, 2*f_H, 3*f_H], labels=['|s - DC|^2', '|s_+|^2 - |s_-|^2', '|s_+|^2'])
 
 plot_spectra(
-    fB_all, [PB_all, PB_diff, PB_pos], "Resp+Heart: spectrum of |s - DC|^2",
+    fB_all, [PB_all, PB_diff, PB_pos], "Resp+Heart spectrum",
     fmarks=[f_R, 2*f_R, f_H, abs(f_R-f_H), f_R+f_H], labels=['|s - DC|^2', '|s_+|^2 - |s_-|^2', '|s_+|^2'])
+# plot_spectra(
+#     fB_all, [PB_all, PB_diff], "Resp+Heart spectrum",
+#     fmarks=[f_R, 2*f_R, f_H, abs(f_R-f_H), f_R+f_H], labels=['|s - DC|^2', '|s_+|^2 - |s_-|^2'])
 
 plt.show()
