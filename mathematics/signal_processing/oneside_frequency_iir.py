@@ -1,10 +1,10 @@
 
 # one_sided_iir.py
 from __future__ import annotations
-from dataclasses import dataclass
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
+from numpy.typing import NDArray
 from scipy import signal, optimize
 
 
@@ -22,12 +22,12 @@ def _a_from_fc(fc: float, fs: float) -> float:
     return float(np.clip(a, -0.999, 0.999))  # stay strictly inside unit circle
 
 
-def _allpass_freqz(a: float, w: np.ndarray) -> np.ndarray:
+def _allpass_freqz(a: float, w: NDArray) -> NDArray:
     z = np.exp(1j * w)
     return (a + z**-1) / (1 + a * z**-1)
 
 
-def _cascade_freqz(a_list: np.ndarray, w: np.ndarray) -> np.ndarray:
+def _cascade_freqz(a_list: NDArray, w: NDArray) -> NDArray:
     H = np.ones_like(w, dtype=complex)
     for a in a_list:
         H *= _allpass_freqz(float(a), w)
@@ -36,10 +36,10 @@ def _cascade_freqz(a_list: np.ndarray, w: np.ndarray) -> np.ndarray:
 
 def _fit_allpass_pair(
     fs: float, f1: float, f2: float, nsec: int, wpts: int = 512, init_ratio: float = np.sqrt(2.0)
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[NDArray, NDArray]:
     """
     最小二乗で 2 本のオールパス群 (a0, a1) を設計：
-    Δ位相 = ∠H1 - ∠H0 ≈ +90° （[f1,f2] で）。
+    Δ位相 = ∠H1 - ∠H0 ≈ -90° （[f1,f2] で）。
     """
     # 初期値：帯域を等比配置、片方を少しシフト
     f0 = np.geomspace(f1, f2, nsec)
@@ -64,28 +64,25 @@ def _fit_allpass_pair(
     return res.x[:nsec].astype(float), res.x[nsec:].astype(float)
 
 
-@dataclass
 class OneSidedIIR:
-    """
-    IIR 片側通過フィルタ（正 or 負）。ストリーミング対応（内部状態保持）。
+    """IIR 片側通過フィルタ (正 or 負).
 
-    y_pos ≈ 0.5*(H0*x + j*H1*x)
-    y_neg ≈ 0.5*(H0*x - j*H1*x)
+    y_pos = 0.5*(H0*x + j*H1*x)
+    y_neg = 0.5*(H0*x - j*H1*x)
     """
-    fs: float
-    band: tuple[float, float] = (0.3, 10.0)  # 設計帯域（例：ドップラーIQは ≤10 Hz）
-    nsec: int = 6                            # 1次オールパス段数（片経路）
-    mode: str = "pos"                        # "pos" or "neg"
-    design: str = "fit"                      # "fit"（推奨） or "geometric"
-    wpts: int = 512                          # 設計・診断の周波数サンプル
-
-    def __post_init__(self):
+    def __init__(
+            self, fs: float, band: tuple[float, float], nsec: int = 6, mode: str = "pos",
+            design: str = "fit", wpts: int = 512) -> None:
+        self.fs = fs
+        self.band = band
+        self.nsec = nsec
+        self.mode = mode
+        self.design = design
+        self.wpts = wpts
         self.set_mode(self.mode)
-        # self._design_filters()
         self.reset_state()
 
-    # ---------- design ----------
-    def _design_filters(self):
+    def _design_filters(self) -> None:
         f1, f2 = self.band
         if self.design == "fit":
             self.a0, self.a1 = _fit_allpass_pair(self.fs, f1, f2, self.nsec, self.wpts)
@@ -100,8 +97,7 @@ class OneSidedIIR:
         self._ba0 = [(np.array([a, 1.0], float), np.array([1.0, a], float)) for a in self.a0]
         self._ba1 = [(np.array([a, 1.0], float), np.array([1.0, a], float)) for a in self.a1]
 
-    # ---------- mode ----------
-    def set_mode(self, mode: str):
+    def set_mode(self, mode: str) -> None:
         mode = mode.lower()
         if mode not in ("pos", "neg"):
             raise ValueError("mode must be 'pos' or 'neg'")
@@ -109,27 +105,25 @@ class OneSidedIIR:
         self.mode = mode
         self._design_filters()
 
-    # ---------- state ----------
-    def reset_state(self):
+    def reset_state(self) -> None:
         # 1次IIRなので各段 zi は1サンプル。複素対応。
         self._zi0 = [np.zeros(1, dtype=complex) for _ in range(self.nsec)]
         self._zi1 = [np.zeros(1, dtype=complex) for _ in range(self.nsec)]
 
-    # ---------- processing ----------
-    def _cascade_lfilter(self, x: np.ndarray, ba_list, zi_list):
+    def _cascade_lfilter(self, x: NDArray, ba_list, zi_list):
         y = x
         for i, (b, a) in enumerate(ba_list):
             y, zi_list[i] = signal.lfilter(b, a, y, zi=zi_list[i])
         return y
 
-    def process(self, x: np.ndarray) -> np.ndarray:
-        """x: 1-D 複素IQ。チャンク処理可（状態保持）。"""
+    def process(self, x: NDArray) -> NDArray:
+        """フィルタ処理"""
         x = np.asarray(x).astype(complex, copy=False)
         y0 = self._cascade_lfilter(x, self._ba0, self._zi0)
         y1 = self._cascade_lfilter(x, self._ba1, self._zi1)
         return 0.5 * (y0 + (1j * self._sgn) * y1)
 
-    # ---------- analysis ----------
+    # ---------- 以下, 評価用 ----------
     def response(self, nfft: int = 4096):
         """複素周波数応答を返す: (freq_Hz, H_complex)"""
         f = np.linspace(-0.5 * self.fs, 0.5 * self.fs, nfft, endpoint=False)
@@ -150,98 +144,113 @@ class OneSidedIIR:
         return f, np.rad2deg(dphi)
 
 
-# Desired positive tones at 1.5 Hz and 6 Hz, plus mirror at -1.5 Hz (image)
-fs = 100.0
-total_time = 10.
-t = np.arange(int(total_time*fs))/fs  # 30 seconds
-x = 0.8*np.exp(1j*2*np.pi*1.5*t) + 0.5*np.exp(1j*2*np.pi*6.0*t) + 0.5*np.exp(-1j*2*np.pi*3.0*t)
-x += 0.01*(np.random.default_rng(0).standard_normal(len(t)) + 1j*np.random.default_rng(1).standard_normal(len(t)))
+if __name__ == '__main__':
+    SHOW_ANIMATION = False
+    SAVE_ANIMATION = False
+    # Desired positive tones at 1.5 Hz and 6 Hz, plus mirror at -1.5 Hz (image)
+    fs = 100.0
+    total_time = 10.
+    t = np.arange(int(total_time*fs))/fs
+    x = 0.8*np.exp(1j*2*np.pi*1.5*t) + 0.5*np.exp(1j*2*np.pi*6.0*t) + 0.5*np.exp(-1j*2*np.pi*3.0*t)
+    x += 0.01*(np.random.default_rng(0).standard_normal(len(t)) + 1j*np.random.default_rng(1).standard_normal(len(t)))
 
-flt = OneSidedIIR(fs, band=(0.3, 10.0), nsec=6, mode="pos", design="fit")
-y_pos = flt.process(x)
+    flt = OneSidedIIR(fs, band=(0.3, 10.0), nsec=6, mode="pos", design="fit")
+    y_pos = flt.process(x)
 
-flt.set_mode("neg")
-y_neg = flt.process(x)
+    flt.set_mode("neg")
+    y_neg = flt.process(x)
 
-# plt.plot(t, y_pos.real, alpha=0.5)
-# plt.plot(t, y_pos.imag, alpha=0.5)
-# plt.show()
+    # Spectra
+    f_x, X_db = spectrum(x, fs, 32768)
+    f_x, Y_db = spectrum(y_pos, fs, 32768)
+    f_x, Y_neg_db = spectrum(y_neg, fs, 32768)
 
-# Spectra
-f_x, X_db = spectrum(x, fs, 32768)
-f_x, Y_db = spectrum(y_pos, fs, 32768)
-f_x, Y_neg_db = spectrum(y_neg, fs, 32768)
+    if SHOW_ANIMATION is False:
+        plt.figure(figsize=(7, 4))
+        plt.title('Original')
+        plt.plot(t, x.real, alpha=0.5, label='real')
+        plt.plot(t, x.imag, alpha=0.5, label='imag')
+        plt.legend()
+        plt.xlabel('Time (s)')
 
-# plt.figure(figsize=(7, 4))
-# plt.plot(f_x, X_db, alpha=0.4)
-# plt.plot(f_x, Y_db, alpha=0.4)
-# plt.plot(f_x, Y_neg_db, alpha=0.4)
-# plt.xlim(-15, 15)
-# plt.ylim(-80, 3)
-# plt.xlabel("Frequency (Hz)")
-# plt.ylabel("Magnitude (dB)")
-# plt.title("Before: baseband IQ (≤10 Hz)")
-# plt.grid(True)
-# plt.show()
+        plt.figure(figsize=(7, 4))
+        plt.title('Positive Frequency')
+        plt.plot(t, y_pos.real, alpha=0.5, label='real')
+        plt.plot(t, y_pos.imag, alpha=0.5, label='imag')
+        plt.legend()
+        plt.xlabel('Time (s)')
 
+        plt.figure(figsize=(7, 4))
+        plt.title('Negative Frequency')
+        plt.plot(t, y_neg.real, alpha=0.5, label='real')
+        plt.plot(t, y_neg.imag, alpha=0.5, label='imag')
+        plt.legend()
+        plt.xlabel('Time (s)')
 
+        plt.figure(figsize=(7, 4))
+        plt.plot(f_x, X_db, alpha=0.4, label='original')
+        plt.plot(f_x, Y_db, alpha=0.4, label='filtered')
+        # plt.plot(f_x, Y_neg_db, alpha=0.4)
+        plt.xlim(-15, 15)
+        plt.ylim(-80, 3)
+        plt.xlabel("Frequency (Hz)")
+        plt.ylabel("Magnitude (dB)")
+        plt.title("Magnitudes")
+        plt.grid(True)
+        plt.legend()
+        plt.show()
+    else:
+        FPS = 20
+        DURATION = len(t) / fs
+        frames = int(FPS * DURATION)
 
-# ------- パラメータ -------
-FPS = 20
-DURATION = len(t) / fs
+        # ------- 図の準備 -------
+        fig, (axL, axR) = plt.subplots(1, 2, figsize=(8, 4))
+        for ax, title in [
+                (axL, "Original"), (axR, "Positive: Blue, Negative: Red")]:
+            ax.set_aspect("equal", adjustable="box")
+            ax.set_xlim(-2.0, 2.0)
+            ax.set_ylim(-2.0, 2.0)
+            ax.set_xlabel("Real")
+            ax.set_ylabel("Imag")
+            ax.set_title(title)
 
-# ------- 時間軸と位相 -------
-frames = int(FPS * DURATION)
+        # 正側のアーティスト
+        gt_pos,  = axL.plot([], [], marker="o", markersize=5, c='gray')
 
-# ------- 図の準備 -------
-fig, (axL, axR) = plt.subplots(1, 2, figsize=(8, 4))
-for ax, title in [
-        (axL, "Original"), (axR, "Positive: Blue, Negative: Red")]:
-    ax.set_aspect("equal", adjustable="box")
-    ax.set_xlim(-2.0, 2.0)
-    ax.set_ylim(-2.0, 2.0)
-    ax.set_xlabel("Real")
-    ax.set_ylabel("Imag")
-    ax.set_title(title)
+        # 負側のアーティスト
+        tip_pos,  = axR.plot([], [], marker="o", markersize=5, c='blue')
+        tip_neg,  = axR.plot([], [], marker="o", markersize=5, c='red')
 
-# 正側のアーティスト
-gt_pos,  = axL.plot([], [], marker="o", markersize=5, c='gray')
+        artists = (gt_pos, tip_pos, tip_neg)
 
-# 負側のアーティスト
-tip_pos,  = axR.plot([], [], marker="o", markersize=5, c='blue')
-tip_neg,  = axR.plot([], [], marker="o", markersize=5, c='red')
+        # ------- アニメーション関数 -------
+        def init():
+            gt_pos.set_data([], [])
+            tip_pos.set_data([], [])
+            tip_neg.set_data([], [])
+            return artists
 
-artists = (gt_pos, tip_pos, tip_neg)
+        def update(i):
+            # 正（+ω）
+            gt_x, gt_y = x[i].real, x[i].imag
+            x_p = y_pos[i].real
+            y_p = y_pos[i].imag
+            gt_pos.set_data([gt_x], [gt_y])
+            tip_pos.set_data([x_p], [y_p])
+            # 負
+            x_n = y_neg[i].real
+            y_n = y_neg[i].imag
+            tip_neg.set_data([x_n], [y_n])
+            return artists
 
-# ------- アニメーション関数 -------
-def init():
-    gt_pos.set_data([], [])
-    tip_pos.set_data([], [])
-    tip_neg.set_data([], [])
-    return artists
+        # ------- 実行 -------
+        anim = FuncAnimation(
+            fig, update, frames=frames, init_func=init,
+            interval=1000 / FPS, blit=True, repeat=False)
 
-
-def update(i):
-    # 正（+ω）
-    gt_x, gt_y = x[i].real, x[i].imag
-    x_p = y_pos[i].real
-    y_p = y_pos[i].imag
-    gt_pos.set_data([gt_x], [gt_y])
-    tip_pos.set_data([x_p], [y_p])
-
-    # 負
-    x_n = y_neg[i].real
-    y_n = y_neg[i].imag
-    tip_neg.set_data([x_n], [y_n])
-
-    return artists
-
-# ------- 実行 -------
-anim = FuncAnimation(
-    fig, update, frames=frames, init_func=init,
-    interval=1000 / FPS, blit=True, repeat=False)
-
-if __name__ == "__main__":
-    plt.tight_layout()
-    plt.show()
-    # anim.save('./test.gif')
+        plt.tight_layout()
+        if SAVE_ANIMATION:
+            anim.save('oneside_iir_filter.gif', writer='pillow')
+        else:
+            plt.show()
