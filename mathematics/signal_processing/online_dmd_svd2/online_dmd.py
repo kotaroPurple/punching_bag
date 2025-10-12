@@ -8,8 +8,8 @@ class OnlineDMD:
     仕様:
         - ランク増加/維持を残差ノルム rho の相対閾値で判定
         - ランク上限 r_max（超えたら上位特異値でトランケーション）
-        - 忘却係数 lambda_ を Σ と C に同時適用（weighted online DMD と整合）
-        - 交差項 C は rank-1 更新:  C <- λC + (U^T x_next) v_last^T
+        - 忘却係数 lambda_ を Σ と H に同時適用（weighted online DMD と整合）
+        - 交差項 H は rank-1 更新:  H <- λH + (U^T x_next) v_last^T
             ※ v_last は "小 SVD の右特異行列の最後の列"（np.linalg.svd の Vt の最後の列を使う）
 
     example:
@@ -28,14 +28,14 @@ class OnlineDMD:
         self.tau_add = float(tau_add)
 
         # 保持するのは U, S, C のみ（V は保持しない）
-        self.U = None  # (n, r)
-        self.S = None  # (r,)   singular values
-        self.H = None  # (r, r) = U^T X' V への低ランク交差項
+        self.U = np.empty(0)  # (n, r)
+        self.S = np.empty(0)  # (r,)   singular values
+        self.H = np.empty(0)  # (r, r) = U^T X' V への低ランク交差項
 
         # ストリーミング用バッファ
-        self._x_prev = None  # 次に取り込む列
+        self._x_prev = np.empty(0)  # 次に取り込む列
 
-    def initialize(self, X: np.ndarray):
+    def initialize(self, X: NDArray):
         """
         バッチ初期化。X.shape = (n, m)
         X = U Σ V^T の SVD を計算し、self.U, self.S, self.H を初期化。
@@ -54,6 +54,7 @@ class OnlineDMD:
         V = Vt.T[:, :r]
 
         if m > 1:
+            # 入力X は Y=AX の Y,X を共に含むため V[:-1] で行を減らす
             X_prime = X[:, 1:]
             V_trim = V[:-1, :]
             self.H = self.U.T @ X_prime @ V_trim.T
@@ -63,7 +64,7 @@ class OnlineDMD:
         self._x_prev = X[:, -1].copy()
 
     # ---------------------- 更新 ----------------------
-    def update(self, x_new: np.ndarray):
+    def update(self, x_new: NDArray):
         """
         新しい観測 x_new (shape=(n,)) を投入。
         直前の x_prev を SVD に取り込み → 小 SVD の Vt から v_last を取り出し → x_new で C を rank-1 更新。
@@ -80,8 +81,8 @@ class OnlineDMD:
         r = S.shape[0]
 
         # 既存空間への射影と残差
-        p = U.T @ x_prev                 # (r,)
-        r_vec = x_prev - U @ p           # (n,)
+        p = U.T @ x_prev  # (r,)
+        r_vec = x_prev - U @ p  # (n,)
         rho = np.linalg.norm(r_vec)
 
         # ランク増加の判定（相対閾値 & 上限）
@@ -89,59 +90,59 @@ class OnlineDMD:
 
         if add_rank:
             # --- ランク +1: 正方 (r+1)x(r+1) の broken-arrow SVD ---
-            r_hat = (r_vec / rho).reshape(-1, 1)           # (n,1)
+            r_hat = (r_vec / rho).reshape(-1, 1)  # (n,1)
             K = np.block([
                 [np.diag(S), p.reshape(-1, 1)],
                 [np.zeros((1, r)), np.array([[rho]])]
-            ])                                              # (r+1, r+1)
+            ])  # (r+1, r+1)
 
-            Ut, St, Vt = np.linalg.svd(K, full_matrices=True)         # K = Ut * diag(St) * Vt
+            Ut, St, Vt = np.linalg.svd(K, full_matrices=True)  # K = Ut * diag(St) * Vt
             # U の拡張→小回転
-            U_ext = np.hstack([U, r_hat])                  # (n, r+1)
-            U_new_full = U_ext @ Ut                        # (n, r+1)
-            svals = St.copy()                              # (r+1,)
+            U_ext = np.hstack([U, r_hat])  # (n, r+1)
+            U_new_full = U_ext @ Ut  # (n, r+1)
+            svals = St.copy()  # (r+1,)
 
             # ---- v_last の取り出し（V 非保持）----
             # v_last^T = e_{r+1}^T * (Vtilde) * Pi  ≡ （Vt の 最後の列）を列選択 Pi で間引いたもの
             # 現段階では選抜前なので、まずは v_last_full = Vt[:, -1]
-            v_last_full = Vt[:, -1].copy()                 # shape (r+1,)
+            v_last_full = Vt[:, -1].copy()  # shape (r+1,)
 
             # 上位 r_max へトランケーション
             r_new = min(self.r_max, svals.shape[0])
-            idx = np.argsort(svals)[::-1][:r_new]          # 上位 r_new の列を選ぶ
-            U_new = U_new_full[:, idx]                     # (n, r_new)
-            S_new = svals[idx]                             # (r_new,)
-            v_last = v_last_full[idx]                      # (r_new,)
+            idx = np.argsort(svals)[::-1][:r_new]  # 上位 r_new の列を選ぶ
+            U_new = U_new_full[:, idx]  # (n, r_new)
+            S_new = svals[idx]  # (r_new,)
+            v_last = v_last_full[idx]  # (r_new,)
 
         else:
             # --- ランク維持: 薄い (r x (r+1)) の SVD ---
-            Kthin = np.hstack([np.diag(S), p.reshape(-1, 1)])   # (r, r+1)
+            Kthin = np.hstack([np.diag(S), p.reshape(-1, 1)])  # (r, r+1)
             Ut_r, St_r, Vt_r = np.linalg.svd(Kthin, full_matrices=False)  # Vt_r: (r, r+1)
 
-            U_new = U @ Ut_r                     # (n, r)
-            S_new = St_r                         # (r,)
+            U_new = U @ Ut_r  # (n, r)
+            S_new = St_r  # (r,)
             # v_last^T = e_{r+1}^T * Vthin で、Vthin = Vt_r^T → v_last = Vt_r[:, -1]
-            v_last = Vt_r[:, -1].copy()          # (r,)  ← これが直接使える
+            v_last = Vt_r[:, -1].copy()  # (r,)  ← これが直接使える
 
         # ---- 忘却（weighted の等価表現）----
         if self.lambda_ != 1.0:
             S_new = self.lambda_ * S_new
 
-        # ---- 交差項 C の rank-1 更新（V 非保持）----
-        # C のサイズを新ランクに揃えつつ減衰
-        C_new = self._resize_and_decay_C(target_r=S_new.shape[0], decay=self.lambda_)
-        alpha_next = (U_new.T @ x_new).ravel()              # (r_new,)
+        # ---- 交差項 H の rank-1 更新（V 非保持）----
+        # H のサイズを新ランクに揃えつつ減衰
+        H_new = self._resize_and_decay_H(target_r=S_new.shape[0], decay=self.lambda_)
+        alpha_next = (U_new.T @ x_new).ravel()  # (r_new,)
         # v_last は上で (r_new,) にしておいたので、そのまま外積
-        C_new = C_new + np.outer(alpha_next, v_last)
+        H_new = H_new + np.outer(alpha_next, v_last)
 
         # 保存
-        self.U, self.S, self.H = U_new, S_new, C_new
+        self.U, self.S, self.H = U_new, S_new, H_new
         self._x_prev = x_new.copy()
 
     # ---------------------- 出力 ----------------------
-    def A_tilde(self):
+    def A_tilde(self) -> None|NDArray:
         """低ランク小行列 Ã = C Σ^{-1} （shape = (r, r)）"""
-        if self.U is None:
+        if self.U.size == 0:
             return None
         Sinv = 1.0 / np.maximum(self.S, 1e-15)
         return self.H @ np.diag(Sinv)
@@ -156,15 +157,15 @@ class OnlineDMD:
         return evals, modes
 
     # ---------------------- Helper ----------------------
-    def _resize_and_decay_C(self, target_r: int, decay: float):
+    def _resize_and_decay_H(self, target_r: int, decay: float):
         """C を λ で減衰し target_r に合わせてゼロ詰め/切り出し。"""
         if self.H is None:
             return np.zeros((target_r, target_r))
-        C = decay * self.H
-        r_old = C.shape[0]
+        H = decay * self.H
+        r_old = H.shape[0]
         if target_r == r_old:
-            return C
+            return H
         Z = np.zeros((target_r, target_r))
         r_min = min(target_r, r_old)
-        Z[:r_min, :r_min] = C[:r_min, :r_min]
+        Z[:r_min, :r_min] = H[:r_min, :r_min]
         return Z
