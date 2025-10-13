@@ -47,7 +47,7 @@ class OnlineDMD:
         if n != self.n:
             raise ValueError(f"Input X has incompatible dimension {n}, expected {self.n}")
 
-        U, S, Vt = np.linalg.svd(X, full_matrices=False)
+        U, S, Vt = np.linalg.svd(X, full_matrices=True)
         r = min(self.r_max, S.size)
         self.U = U[:, :r]
         self.S = S[:r]
@@ -57,7 +57,7 @@ class OnlineDMD:
             # 入力X は Y=AX の Y,X を共に含むため V[:-1] で行を減らす
             X_prime = X[:, 1:]
             V_trim = V[:-1, :]
-            self.H = self.U.T @ X_prime @ V_trim.T
+            self.H = self.U.T @ X_prime @ V_trim
         else:
             self.H = np.zeros((r, r))
 
@@ -118,7 +118,6 @@ class OnlineDMD:
             # --- ランク維持: 薄い (r x (r+1)) の SVD ---
             Kthin = np.hstack([np.diag(S), p.reshape(-1, 1)])  # (r, r+1)
             Ut_r, St_r, Vt_r = np.linalg.svd(Kthin, full_matrices=False)  # Vt_r: (r, r+1)
-
             U_new = U @ Ut_r  # (n, r)
             S_new = St_r  # (r,)
             # v_last^T = e_{r+1}^T * Vthin で、Vthin = Vt_r^T → v_last = Vt_r[:, -1]
@@ -169,3 +168,48 @@ class OnlineDMD:
         r_min = min(target_r, r_old)
         Z[:r_min, :r_min] = H[:r_min, :r_min]
         return Z
+
+    def _get_eigendecomposition(self) -> tuple[NDArray, NDArray]:
+        """Get cached eigendecomposition of A_tilde."""
+        A_tilde = self.A_tilde()
+        if A_tilde is not None:
+            self._eigvals, self._eigvecs = np.linalg.eig(A_tilde)
+            return self._eigvals, self._eigvecs  # type: ignore
+        else:
+            raise ValueError()
+
+    def get_mode_amplitudes(self, x_init: NDArray|None = None) -> NDArray:
+        _, modes = self.eigs()
+        if x_init is None:
+            x_init = np.array(self._x_prev)
+        if modes is None:
+            raise ValueError("No modes available")
+        return np.linalg.lstsq(modes, x_init, rcond=None)[0]
+
+    def get_mode_frequencies(self, dt: float = 1.0) -> NDArray:
+        """Get frequencies of DMD modes.
+
+        Args:
+            dt: Time step size
+
+        Returns:
+            Frequencies in Hz (if dt is in seconds)
+        """
+        eigvals = self.eigs()[0]
+        if eigvals is None:
+            raise ValueError("No modes available")
+        return np.imag(np.log(eigvals)) / (2 * np.pi * dt)
+
+    def get_mode_growth_rates(self, dt: float = 1.0) -> NDArray:
+        """Get growth rates of DMD modes.
+
+        Args:
+            dt: Time step size
+
+        Returns:
+            Growth rates (positive = growing, negative = decaying)
+        """
+        eigvals = self.eigs()[0]
+        if eigvals is None:
+            raise ValueError("No modes available")
+        return np.real(np.log(eigvals)) / dt
