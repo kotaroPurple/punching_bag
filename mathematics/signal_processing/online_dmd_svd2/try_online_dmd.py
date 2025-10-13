@@ -98,93 +98,93 @@ def test_chirp_tracking():
             'config': config
         }
 
-    # # Theoretical chirp frequency
-    # theoretical_time = np.linspace(0, duration, 100)
-    # theoretical_freq = []
-    # for t in theoretical_time:
-    #     if t <= duration:
-    #         f_inst = f0 + (f1 - f0) * t / duration  # Linear sweep
-    #     else:
-    #         f_inst = 5.0
-    #     theoretical_freq.append(f_inst)
+    # Theoretical chirp frequency
+    theoretical_time = np.linspace(0, duration, 100)
+    theoretical_freq = []
+    for t in theoretical_time:
+        if t <= duration:
+            f_inst = f0 + (f1 - f0) * t / duration  # Linear sweep
+        else:
+            f_inst = 5.0
+        theoretical_freq.append(f_inst)
 
-    # # Visualization
-    # fig, axes = plt.subplots(2, 2, figsize=(15, 10))
-    # fig.suptitle('Online DMD Frequency Tracking Performance', fontsize=16)
+    # Visualization
+    fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+    fig.suptitle('Online DMD Frequency Tracking Performance', fontsize=16)
 
-    # # Original chirp signal
-    # axes[0, 0].plot(time_data, signal_data)  # First 5 seconds
-    # axes[0, 0].set_title('Chirp Signal (First 5s)')
-    # axes[0, 0].set_xlabel('Time (s)')
-    # axes[0, 0].set_ylabel('Amplitude')
-    # axes[0, 0].grid(True, alpha=0.3)
+    # Original chirp signal
+    axes[0, 0].plot(time_data, signal_data)  # First 5 seconds
+    axes[0, 0].set_title('Chirp Signal (First 5s)')
+    axes[0, 0].set_xlabel('Time (s)')
+    axes[0, 0].set_ylabel('Amplitude')
+    axes[0, 0].grid(True, alpha=0.3)
 
-    # # Frequency tracking comparison
-    # axes[0, 1].plot(theoretical_time, theoretical_freq, 'k--', linewidth=1, label='True Frequency')
-    # colors = ['red', 'blue', 'green', 'orange', 'purple']
-    # for i, (name, result) in enumerate(results.items()):
-    #     if result['time'] and result['frequency']:
-    #         axes[0, 1].plot(
-    #             result['time'], result['frequency'],
-    #             color=colors[i % len(colors)], marker='o', markersize=3, label=name, alpha=0.5)
+    # Frequency tracking comparison
+    axes[0, 1].plot(theoretical_time, theoretical_freq, 'k--', linewidth=1, label='True Frequency')
+    colors = ['red', 'blue', 'green', 'orange', 'purple']
+    for i, (name, result) in enumerate(results.items()):
+        if result['time'] and result['frequency']:
+            axes[0, 1].plot(
+                result['time'], result['frequency'],
+                color=colors[i % len(colors)], marker='o', markersize=3, label=name, alpha=0.5)
 
-    # axes[0, 1].set_title('Frequency Tracking Comparison')
-    # axes[0, 1].set_xlabel('Time (s)')
-    # axes[0, 1].set_ylabel('Detected Frequency (Hz)')
-    # axes[0, 1].legend()
-    # axes[0, 1].grid(True, alpha=0.3)
-    # axes[0, 1].set_ylim(f0 * 0.8, f1 * 1.2)
+    axes[0, 1].set_title('Frequency Tracking Comparison')
+    axes[0, 1].set_xlabel('Time (s)')
+    axes[0, 1].set_ylabel('Detected Frequency (Hz)')
+    axes[0, 1].legend()
+    axes[0, 1].grid(True, alpha=0.3)
+    axes[0, 1].set_ylim(f0 * 0.8, f1 * 1.2)
 
-    # # Growth rates
-    # axes[1, 0].axhline(y=0, color='black', linestyle='-', alpha=0.3)
-    # for i, (name, result) in enumerate(results.items()):
-    #     if result['time'] and result['growth_rates']:
-    #         axes[1, 0].plot(
-    #             result['time'], result['growth_rates'],
-    #             color=colors[i % len(colors)], marker='o', markersize=3, label=name, alpha=0.5)
+    # Growth rates
+    axes[1, 0].axhline(y=0, color='black', linestyle='-', alpha=0.3)
+    for i, (name, result) in enumerate(results.items()):
+        if result['time'] and result['growth_rates']:
+            axes[1, 0].plot(
+                result['time'], result['growth_rates'],
+                color=colors[i % len(colors)], marker='o', markersize=3, label=name, alpha=0.5)
 
-    # axes[1, 0].set_title('Growth Rates (Stability Indicator)')
-    # axes[1, 0].set_xlabel('Time (s)')
-    # axes[1, 0].set_ylabel('Growth Rate')
-    # axes[1, 0].legend()
-    # axes[1, 0].grid(True, alpha=0.3)
+    axes[1, 0].set_title('Growth Rates (Stability Indicator)')
+    axes[1, 0].set_xlabel('Time (s)')
+    axes[1, 0].set_ylabel('Growth Rate')
+    axes[1, 0].legend()
+    axes[1, 0].grid(True, alpha=0.3)
 
-    # # Tracking error analysis
-    # axes[1, 1].set_title('Tracking Error Analysis')
-    # for i, (name, result) in enumerate(results.items()):
-    #     if result['time'] and result['frequency']:
-    #         # Interpolate theoretical frequency at measurement times
-    #         theoretical_interp = np.interp(result['time'], theoretical_time, theoretical_freq)
-    #         tracking_error = np.abs(np.array(result['frequency']) - theoretical_interp)
+    # Tracking error analysis
+    axes[1, 1].set_title('Tracking Error Analysis')
+    for i, (name, result) in enumerate(results.items()):
+        if result['time'] and result['frequency']:
+            # Interpolate theoretical frequency at measurement times
+            theoretical_interp = np.interp(result['time'], theoretical_time, theoretical_freq)
+            tracking_error = np.abs(np.array(result['frequency']) - theoretical_interp)
 
-    #         axes[1, 1].plot(
-    #             result['time'], tracking_error,
-    #             color=colors[i % len(colors)], marker='o', markersize=3,
-    #             label=f"{name} (avg: {np.mean(tracking_error):.2f}Hz)", alpha=0.8)
+            axes[1, 1].plot(
+                result['time'], tracking_error,
+                color=colors[i % len(colors)], marker='o', markersize=3,
+                label=f"{name} (avg: {np.mean(tracking_error):.2f}Hz)", alpha=0.8)
 
-    # axes[1, 1].set_xlabel('Time (s)')
-    # axes[1, 1].set_ylabel('Tracking Error (Hz)')
-    # axes[1, 1].legend()
-    # axes[1, 1].grid(True, alpha=0.3)
+    axes[1, 1].set_xlabel('Time (s)')
+    axes[1, 1].set_ylabel('Tracking Error (Hz)')
+    axes[1, 1].legend()
+    axes[1, 1].grid(True, alpha=0.3)
 
-    # plt.tight_layout()
-    # plt.show()
+    plt.tight_layout()
+    plt.show()
 
-    # # Print analysis summary
-    # print("\n=== Online DMD Stability Analysis ===")
-    # for name, result in results.items():
-    #     if result['time'] and result['frequency']:
-    #         theoretical_interp = np.interp(result['time'], theoretical_time, theoretical_freq)
-    #         tracking_error = np.abs(np.array(result['frequency']) - theoretical_interp)
-    #         avg_growth = np.mean(np.abs(result['growth_rates'])) if result['growth_rates'] else 0
+    # Print analysis summary
+    print("\n=== Online DMD Stability Analysis ===")
+    for name, result in results.items():
+        if result['time'] and result['frequency']:
+            theoretical_interp = np.interp(result['time'], theoretical_time, theoretical_freq)
+            tracking_error = np.abs(np.array(result['frequency']) - theoretical_interp)
+            avg_growth = np.mean(np.abs(result['growth_rates'])) if result['growth_rates'] else 0
 
-    #         print(f"\n{name}:")
-    #         print(f"  Average tracking error: {np.mean(tracking_error):.3f} Hz")
-    #         print(f"  Max tracking error: {np.max(tracking_error):.3f} Hz")
-    #         print(f"  Average |growth rate|: {avg_growth:.3f}")
-    #         print(f"  Stability: {'Good' if avg_growth < 1.0 else 'Poor'}")
+            print(f"\n{name}:")
+            print(f"  Average tracking error: {np.mean(tracking_error):.3f} Hz")
+            print(f"  Max tracking error: {np.max(tracking_error):.3f} Hz")
+            print(f"  Average |growth rate|: {avg_growth:.3f}")
+            print(f"  Stability: {'Good' if avg_growth < 1.0 else 'Poor'}")
 
-    # return results
+    return results
 
 
 if __name__ == "__main__":
