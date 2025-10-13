@@ -39,7 +39,7 @@ class OnlineDMD:
         """
         バッチ初期化。X.shape = (n, m)
         X = U Σ V^T の SVD を計算し、self.U, self.S, self.H を初期化。
-        m > 1 の場合は X' = X[:, 1:] を使って self.H = U.T @ X' @ V[:, :-1] を初期化。
+        m > 1 の場合は X' = X[:, 1:] を使って self.H = U.T @ X' @ V[1:, :] を初期化。
         _x_prev は X の最後の列に設定。
         """
         X = np.asarray(X, dtype=float)
@@ -54,9 +54,9 @@ class OnlineDMD:
         V = Vt.T[:, :r]
 
         if m > 1:
-            # 入力X は Y=AX の Y,X を共に含むため V[:-1] で行を減らす
+            # 入力X は Y=AX の Y,X を共に含むため 1 列目を落として整列させる
             X_prime = X[:, 1:]
-            V_trim = V[:-1, :]
+            V_trim = V[1:, :]
             self.H = self.U.T @ X_prime @ V_trim
         else:
             self.H = np.zeros((r, r))
@@ -72,7 +72,7 @@ class OnlineDMD:
         """
         x_new = np.asarray(x_new, dtype=float).reshape(-1)
         assert x_new.shape[0] == self.n
-        if self.U is None:
+        if self.U.size == 0:
             raise RuntimeError("OnlineDMD must be initialized with initialize() before update().")
 
         # ここから毎回: x_prev を取り込み、x_new で C を更新
@@ -158,7 +158,7 @@ class OnlineDMD:
     # ---------------------- Helper ----------------------
     def _resize_and_decay_H(self, target_r: int, decay: float):
         """C を λ で減衰し target_r に合わせてゼロ詰め/切り出し。"""
-        if self.H is None:
+        if self.H.size == 0:
             return np.zeros((target_r, target_r))
         H = decay * self.H
         r_old = H.shape[0]

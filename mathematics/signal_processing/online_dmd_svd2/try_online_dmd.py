@@ -68,10 +68,9 @@ def test_chirp_tracking():
         short_samples = 10
         for i in range(init_length, samples, short_samples):  # Every 10 samples (0.1s)
             # new sample and make x vector
-            for j in range(i, i + short_samples):
-                if j < len(signal_data):
-                    new_vector = hankel.update(signal_data[j])
-                    dmd.update(new_vector)
+            for value in signal_data[i:i + short_samples]:
+                new_vector = hankel.update(value)
+                dmd.update(new_vector)
 
             # Get current analysis
             try:
