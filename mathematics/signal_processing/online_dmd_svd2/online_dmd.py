@@ -47,7 +47,8 @@ class OnlineDMD:
         if n != self.n:
             raise ValueError(f"Input X has incompatible dimension {n}, expected {self.n}")
 
-        U, S, Vt = np.linalg.svd(X, full_matrices=True)
+        # U, S, Vt = np.linalg.svd(X, full_matrices=True)
+        U, S, Vt = np.linalg.svd(X[:, :-1], full_matrices=True)
         r = min(self.r_max, S.size)
         self.U = U[:, :r]
         self.S = S[:r]
@@ -56,8 +57,10 @@ class OnlineDMD:
         if m > 1:
             # 入力X は Y=AX の Y,X を共に含むため 1 列目を落として整列させる
             X_prime = X[:, 1:]
-            V_trim = V[1:, :]
-            self.H = self.U.T @ X_prime @ V_trim
+            # V_trim = V[:-1, :]
+            # V_trim = V[1:, :]
+            # self.H = self.U.T @ X_prime @ V_trim
+            self.H = self.U.T @ X_prime @ V
         else:
             self.H = np.zeros((r, r))
 
@@ -88,31 +91,48 @@ class OnlineDMD:
         # ランク増加の判定（相対閾値 & 上限）
         add_rank = (rho > self.tau_add * max(np.linalg.norm(x_prev), 1e-12)) and (r < self.r_max)
 
+        # self.H *= np.sqrt(self.lambda_)
+        # S *= np.sqrt(self.lambda_)
+        self.H *= self.lambda_
+        S *= self.lambda_
+
         if add_rank:
             # --- ランク +1: 正方 (r+1)x(r+1) の broken-arrow SVD ---
-            r_hat = (r_vec / rho).reshape(-1, 1)  # (n,1)
+            # r_hat = (r_vec / rho).reshape(-1, 1)  # (n,1)
             K = np.block([
                 [np.diag(S), p.reshape(-1, 1)],
                 [np.zeros((1, r)), np.array([[rho]])]
             ])  # (r+1, r+1)
 
-            Ut, St, Vt = np.linalg.svd(K, full_matrices=True)  # K = Ut * diag(St) * Vt
+            Ut_r, St_r, Vt_r = np.linalg.svd(K, full_matrices=True)  # K = Ut * diag(St) * Vt
+            U_aug = np.column_stack((U, rho))
             # U の拡張→小回転
-            U_ext = np.hstack([U, r_hat])  # (n, r+1)
-            U_new_full = U_ext @ Ut  # (n, r+1)
-            svals = St.copy()  # (r+1,)
+            # U_ext = np.hstack([U, r_hat])  # (n, r+1)
+            # U_new_full = U_ext @ Ut  # (n, r+1)
+            # svals = St.copy()  # (r+1,)
 
-            # ---- v_last の取り出し（V 非保持）----
-            # v_last^T = e_{r+1}^T * (Vtilde) * Pi  ≡ （Vt の 最後の列）を列選択 Pi で間引いたもの
-            # 現段階では選抜前なので、まずは v_last_full = Vt[:, -1]
-            v_last_full = Vt[:, -1].copy()  # shape (r+1,)
+            # update H
+            z_old = U.T @ x_new  # (r,)
+            z_rho = np.dot(rho, x_new)  # scalar
+            H_aug = np.block([
+                [self.H, z_old[:, None]],
+                [np.zeros((1, self.H.shape[1])), np.array([[z_rho]])]
+            ])
+            U_new = U_aug @ Ut_r  # (n, r)
+            S_new = St_r
 
-            # 上位 r_max へトランケーション
-            r_new = min(self.r_max, svals.shape[0])
-            idx = np.argsort(svals)[::-1][:r_new]  # 上位 r_new の列を選ぶ
-            U_new = U_new_full[:, idx]  # (n, r_new)
-            S_new = svals[idx]  # (r_new,)
-            v_last = v_last_full[idx]  # (r_new,)
+
+            # # ---- v_last の取り出し（V 非保持）----
+            # # v_last^T = e_{r+1}^T * (Vtilde) * Pi  ≡ （Vt の 最後の列）を列選択 Pi で間引いたもの
+            # # 現段階では選抜前なので、まずは v_last_full = Vt[:, -1]
+            # v_last_full = Vt[:, -1].copy()  # shape (r+1,)
+
+            # # 上位 r_max へトランケーション
+            # r_new = min(self.r_max, svals.shape[0])
+            # idx = np.argsort(svals)[::-1][:r_new]  # 上位 r_new の列を選ぶ
+            # U_new = U_new_full[:, idx]  # (n, r_new)
+            # S_new = svals[idx]  # (r_new,)
+            # v_last = v_last_full[idx]  # (r_new,)
 
         else:
             # --- ランク維持: 薄い (r x (r+1)) の SVD ---
@@ -120,19 +140,26 @@ class OnlineDMD:
             Ut_r, St_r, Vt_r = np.linalg.svd(Kthin, full_matrices=False)  # Vt_r: (r, r+1)
             U_new = U @ Ut_r  # (n, r)
             S_new = St_r  # (r,)
-            # v_last^T = e_{r+1}^T * Vthin で、Vthin = Vt_r^T → v_last = Vt_r[:, -1]
-            v_last = Vt_r[:, -1].copy()  # (r,)  ← これが直接使える
 
-        # ---- 忘却（weighted の等価表現）----
-        if self.lambda_ != 1.0:
-            S_new = self.lambda_ * S_new
+            z_old = U.T @ x_new  # (r,)
+            H_aug = np.column_stack([self.H, z_old[:, None]])  # (r, r+1)
 
-        # ---- 交差項 H の rank-1 更新（V 非保持）----
-        # H のサイズを新ランクに揃えつつ減衰
-        H_new = self._resize_and_decay_H(target_r=S_new.shape[0], decay=self.lambda_)
-        alpha_next = (U_new.T @ x_new).ravel()  # (r_new,)
-        # v_last は上で (r_new,) にしておいたので、そのまま外積
-        H_new = H_new + np.outer(alpha_next, v_last)
+            # # v_last^T = e_{r+1}^T * Vthin で、Vthin = Vt_r^T → v_last = Vt_r[:, -1]
+            # v_last = Vt_r[:, -1].copy()  # (r,)  ← これが直接使える
+
+        # # ---- 忘却（weighted の等価表現）----
+        # if self.lambda_ != 1.0:
+        #     S_new = self.lambda_ * S_new
+
+        # H
+        H_new = Ut_r.T @ H_aug @ Vt_r.T
+
+        # # ---- 交差項 H の rank-1 更新（V 非保持）----
+        # # H のサイズを新ランクに揃えつつ減衰
+        # H_new = self._resize_and_decay_H(target_r=S_new.shape[0], decay=self.lambda_)
+        # alpha_next = (U_new.T @ x_new).ravel()  # (r_new,)
+        # # v_last は上で (r_new,) にしておいたので、そのまま外積
+        # H_new = H_new + np.outer(alpha_next, v_last)
 
         # 保存
         self.U, self.S, self.H = U_new, S_new, H_new
