@@ -23,7 +23,7 @@ def test_chirp_tracking():
     _time_data = []
 
     f0 = 1.0
-    f1 = 1.5
+    f1 = 1.2
     for i in range(samples):
         sample = generator.generate_chirp(f0=f0, f1=f1, duration=duration, noise_level=0.05)
         _signal_data.append(sample)
@@ -112,8 +112,8 @@ def test_chirp_tracking():
     fig.suptitle('Online DMD Frequency Tracking Performance', fontsize=16)
 
     # Original chirp signal
-    axes[0, 0].plot(time_data, signal_data)  # First 5 seconds
-    axes[0, 0].set_title('Chirp Signal (First 5s)')
+    axes[0, 0].plot(time_data, signal_data) 
+    axes[0, 0].set_title('Chirp Signal')
     axes[0, 0].set_xlabel('Time (s)')
     axes[0, 0].set_ylabel('Amplitude')
     axes[0, 0].grid(True, alpha=0.3)
