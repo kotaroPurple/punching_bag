@@ -35,7 +35,7 @@ class OnlineDMD:
         # ストリーミング用バッファ
         self._x_prev = np.empty(0)  # 次に取り込む列
 
-    def initialize(self, X: NDArray):
+    def initialize(self, X: NDArray) -> None:
         """
         バッチ初期化。X.shape = (n, m)
         X = U Σ V^T の SVD を計算し、self.U, self.S, self.H を初期化。
@@ -47,8 +47,12 @@ class OnlineDMD:
         if n != self.n:
             raise ValueError(f"Input X has incompatible dimension {n}, expected {self.n}")
 
+        # 忘却係数処理
+        coeff_array = self.lambda_ ** np.arange(m - 1, -1, -1)
+        weighted_X = X * coeff_array
+
         # U, S, Vt = np.linalg.svd(X, full_matrices=True)
-        U, S, Vt = np.linalg.svd(X[:, :-1], full_matrices=True)
+        U, S, Vt = np.linalg.svd(weighted_X[:, :-1], full_matrices=True)
         r = min(self.r_max, S.size)
         self.U = U[:, :r]
         self.S = S[:r]
@@ -56,7 +60,7 @@ class OnlineDMD:
 
         if m > 1:
             # 入力X は Y=AX の Y,X を共に含むため 1 列目を落として整列させる
-            X_prime = X[:, 1:]
+            X_prime = weighted_X[:, 1:]
             # V_trim = V[:-1, :]
             # V_trim = V[1:, :]
             # self.H = self.U.T @ X_prime @ V_trim
@@ -64,10 +68,10 @@ class OnlineDMD:
         else:
             self.H = np.zeros((r, r))
 
-        self._x_prev = X[:, -1].copy()
+        self._x_prev = weighted_X[:, -1].copy()
 
     # ---------------------- 更新 ----------------------
-    def update(self, x_new: NDArray):
+    def update(self, x_new: NDArray) -> None:
         """
         新しい観測 x_new (shape=(n,)) を投入。
         直前の x_prev を SVD に取り込み → 小 SVD の Vt から v_last を取り出し → x_new で C を rank-1 更新。
@@ -184,7 +188,7 @@ class OnlineDMD:
 
     # ---------------------- Helper ----------------------
     def _resize_and_decay_H(self, target_r: int, decay: float):
-        """C を λ で減衰し target_r に合わせてゼロ詰め/切り出し。"""
+        """H を λ で減衰し target_r に合わせてゼロ詰め/切り出し。"""
         if self.H.size == 0:
             return np.zeros((target_r, target_r))
         H = decay * self.H
@@ -195,15 +199,6 @@ class OnlineDMD:
         r_min = min(target_r, r_old)
         Z[:r_min, :r_min] = H[:r_min, :r_min]
         return Z
-
-    def _get_eigendecomposition(self) -> tuple[NDArray, NDArray]:
-        """Get cached eigendecomposition of A_tilde."""
-        A_tilde = self.A_tilde()
-        if A_tilde is not None:
-            self._eigvals, self._eigvecs = np.linalg.eig(A_tilde)
-            return self._eigvals, self._eigvecs  # type: ignore
-        else:
-            raise ValueError()
 
     def get_mode_amplitudes(self, x_init: NDArray|None = None) -> NDArray:
         _, modes = self.eigs()

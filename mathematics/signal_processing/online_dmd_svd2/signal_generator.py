@@ -89,7 +89,7 @@ class SignalGenerator:
         self.time += self.dt
         return signal
 
-    def generate_chirp(self, f0: float = 1.0, f1: float = 2.5, duration: float = 10.0, noise_level: float = 0.0) -> float:
+    def generate_chirp(self, f0: float = 1.0, f1: float = 2.5, a0: float = 1.0, a1: float = 1.0, duration: float = 10.0, noise_level: float = 0.0) -> float:
         """Generate chirp signal sample (linear frequency sweep).
 
         Args:
@@ -104,11 +104,12 @@ class SignalGenerator:
         t = self.time
 
         # Linear frequency sweep
+        amp = a0 + (a1 - a0) * (t / duration)
         if t <= duration:
             # Instantaneous frequency: f(t) = f0 + (f1-f0)*t/duration
             # Phase: φ(t) = 2π * [f0*t + (f1-f0)*t²/(2*duration)]
             phase = 2 * np.pi * (f0 * t + (f1 - f0) * t**2 / (2 * duration))
-            signal = np.sin(phase)
+            signal = amp * np.sin(phase)
         else:
             # After duration, use final frequency
             signal = np.sin(2 * np.pi * f1 * t)
