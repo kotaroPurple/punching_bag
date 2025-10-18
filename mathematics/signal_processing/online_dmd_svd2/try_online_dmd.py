@@ -22,10 +22,14 @@ def test_chirp_tracking():
     _signal_data = []
     _time_data = []
 
+    initial_size_rate = 1.5
+
     f0 = 1.0
     f1 = 1.2
+    a0 = 1.0
+    a1 = 1.3
     for i in range(samples):
-        sample = generator.generate_chirp(f0=f0, f1=f1, duration=duration, noise_level=0.05)
+        sample = generator.generate_chirp(f0=f0, f1=f1, a0=a0, a1=a1, duration=duration, noise_level=0.05)
         _signal_data.append(sample)
         _time_data.append(i * dt)
 
@@ -36,7 +40,7 @@ def test_chirp_tracking():
     configs = [
         {"window_size": 100, "max_rank": 4, "forgetting_factor": 1.0, "tau": 0.01, "name": "Standard DMD"},
         {"window_size": 100, "max_rank": 4, "forgetting_factor": 0.99, "tau": 0.01, "name": "Forgetting λ=0.99"},
-        {"window_size": 100, "max_rank": 4, "forgetting_factor": 0.95, "tau": 0.01, "name": "Forgetting λ=0.95"},
+        # {"window_size": 100, "max_rank": 4, "forgetting_factor": 0.95, "tau": 0.01, "name": "Forgetting λ=0.95"},
     ]
 
     results = {}
@@ -52,7 +56,7 @@ def test_chirp_tracking():
 
         # Initialize with first portion
         # init_length = config['window_size'] + 10
-        init_length = int(1.5 * sample_rate)
+        init_length = int(initial_size_rate * sample_rate)
         init_data = array_to_hankel_matrix(signal_data[:init_length], window_size)
         dmd.initialize(init_data)
 
@@ -112,7 +116,7 @@ def test_chirp_tracking():
     fig.suptitle('Online DMD Frequency Tracking Performance', fontsize=16)
 
     # Original chirp signal
-    axes[0, 0].plot(time_data, signal_data) 
+    axes[0, 0].plot(time_data, signal_data)
     axes[0, 0].set_title('Chirp Signal')
     axes[0, 0].set_xlabel('Time (s)')
     axes[0, 0].set_ylabel('Amplitude')
