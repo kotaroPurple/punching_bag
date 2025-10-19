@@ -40,7 +40,7 @@ def test_chirp_tracking():
     configs = [
         {"window_size": 100, "max_rank": 4, "forgetting_factor": 1.0, "tau": 0.01, "name": "Standard DMD"},
         {"window_size": 100, "max_rank": 4, "forgetting_factor": 0.99, "tau": 0.01, "name": "Forgetting λ=0.99"},
-        # {"window_size": 100, "max_rank": 4, "forgetting_factor": 0.95, "tau": 0.01, "name": "Forgetting λ=0.95"},
+        {"window_size": 100, "max_rank": 4, "forgetting_factor": 0.97, "tau": 0.01, "name": "Forgetting λ=0.97"},
     ]
 
     results = {}
