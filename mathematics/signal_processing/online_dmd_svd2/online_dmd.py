@@ -8,6 +8,7 @@ class OnlineDMD:
     仕様:
         - ランク増加/維持を残差ノルム rho の相対閾値で判定
         - ランク上限 r_max（超えたら上位特異値でトランケーション）
+        - 特異値トリミング: 相対値閾 + 二乗累積エネルギー閾を併用
         - 忘却係数 lambda_ を Σ と H に同時適用（weighted online DMD と整合）
         - 交差項 H は rank-1 更新:  H <- λH + (U^T x_next) v_last^T
             ※ v_last は "小 SVD の右特異行列の最後の列"（np.linalg.svd の Vt の最後の列を使う）
@@ -21,11 +22,19 @@ class OnlineDMD:
     """
 
     def __init__(
-            self, n_dim: int, r_max: int = 10, lambda_: float = 1.0, tau_add: float = 1e-2) -> None:
+            self,
+            n_dim: int,
+            r_max: int = 10,
+            lambda_: float = 1.0,
+            tau_add: float = 1e-2,
+            tau_rel: float = 1e-3,
+            tau_energy: float = 0.99) -> None:
         self.n = int(n_dim)
         self.r_max = int(r_max)
         self.lambda_ = float(lambda_)
         self.tau_add = float(tau_add)
+        self.tau_rel = float(tau_rel)
+        self.tau_energy = float(tau_energy)
 
         # 保持するのは U, S, C のみ（V は保持しない）
         self.U = np.empty(0)  # (n, r)
@@ -128,6 +137,9 @@ class OnlineDMD:
         # H
         H_new = Ut_r.T @ H_aug @ Vt_r.T
 
+        # ランク縮小（相対特異値 + エネルギー閾）
+        U_new, S_new, H_new = self._truncate_rank(U_new, S_new, H_new)
+
         # 保存
         self.U, self.S, self.H = U_new, S_new, H_new
         self._x_prev = x_new.copy()
@@ -178,7 +190,7 @@ class OnlineDMD:
             dt: Time step size
 
         Returns:
-            Frequencies in Hz (if dt is in seconds)
+        Frequencies in Hz (if dt is in seconds)
         """
         eigvals = self.eigs()[0]
         if eigvals is None:
@@ -198,3 +210,34 @@ class OnlineDMD:
         if eigvals is None:
             raise ValueError("No modes available")
         return np.real(np.log(eigvals)) / dt
+
+    def _truncate_rank(self, U: NDArray, S: NDArray, H: NDArray):
+        """Apply relative singular value + cumulative energy truncation."""
+        if S.size == 0:
+            return U, S, H
+
+        # Relative threshold (ensure at least the leading singular value is kept)
+        lead = float(S[0])
+        if lead <= 0:
+            r_rel = 1
+        else:
+            rel_mask = (S / lead) >= self.tau_rel
+            if not np.any(rel_mask):
+                rel_mask[0] = True
+            r_rel = int(np.max(np.nonzero(rel_mask))) + 1
+
+        # Energy threshold
+        energy = float(np.sum(S ** 2))
+        if energy <= 0:
+            r_energy = 1
+        else:
+            cum_energy = np.cumsum(S ** 2) / energy
+            idx = np.searchsorted(cum_energy, self.tau_energy, side="left")
+            r_energy = int(idx) + 1
+        r_energy = max(1, min(r_energy, S.size))
+
+        # Combine constraints with r_max
+        r_limit = min(self.r_max, S.size, r_rel)
+        r_keep = max(1, min(r_limit, r_energy))
+
+        return U[:, :r_keep], S[:r_keep], H[:r_keep, :r_keep]
