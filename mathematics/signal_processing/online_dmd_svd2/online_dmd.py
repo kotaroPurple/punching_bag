@@ -37,12 +37,12 @@ class OnlineDMD:
         self.tau_energy = float(tau_energy)
 
         # 保持するのは U, S, C のみ（V は保持しない）
-        self.U = np.empty(0)  # (n, r)
+        self.U = np.empty(0, dtype=np.complex128)  # (n, r)
         self.S = np.empty(0)  # (r,)   singular values
-        self.H = np.empty(0)  # (r, r) = U^T X' V への低ランク交差項
+        self.H = np.empty(0, dtype=np.complex128)  # (r, r) = U^T X' V への低ランク交差項
 
         # ストリーミング用バッファ
-        self._x_prev = np.empty(0)  # 次に取り込む列
+        self._x_prev = np.empty(0, dtype=np.complex128)  # 次に取り込む列
 
     def __repr__(self) -> str:
         current_rank = self.S.shape[0] if self.S.size > 0 else 0
@@ -55,7 +55,7 @@ class OnlineDMD:
         m > 1 の場合は X' = X[:, 1:] を使って self.H = U.T @ X' @ V[1:, :] を初期化。
         _x_prev は X の最後の列に設定。
         """
-        X = np.asarray(X, dtype=float)
+        X = np.asarray(X, dtype=np.complex128)
         n, m = X.shape
         if n != self.n:
             raise ValueError(f"Input X has incompatible dimension {n}, expected {self.n}")
@@ -74,9 +74,9 @@ class OnlineDMD:
         if m > 1:
             # 入力X は Y=AX の Y,X を共に含むため 1 列目を落として整列させる
             Y = weighted_X[:, 1:]
-            self.H = self.U.T @ Y @ V
+            self.H = self.U.conj().T @ Y @ V
         else:
-            self.H = np.zeros((r, r))
+            self.H = np.zeros((r, r), dtype=np.complex128)
 
         self._x_prev = weighted_X[:, -1].copy()
 
@@ -86,7 +86,7 @@ class OnlineDMD:
         直前の x_prev を SVD に取り込み → 小 SVD の Vt から v_last を取り出し → x_new で C を rank-1 更新。
         initialize が呼ばれていることを前提とする。
         """
-        x_new = np.asarray(x_new, dtype=float).reshape(-1)
+        x_new = np.asarray(x_new, dtype=np.complex128).reshape(-1)
         assert x_new.shape[0] == self.n
         if self.U.size == 0:
             raise RuntimeError("OnlineDMD must be initialized with initialize() before update().")
@@ -97,7 +97,7 @@ class OnlineDMD:
         r = S.shape[0]
 
         # 既存空間への射影と残差
-        p = U.T @ x_prev  # (r,)
+        p = U.conj().T @ x_prev  # (r,)
         r_vec = x_prev - U @ p  # (n,)
         rho = np.linalg.norm(r_vec)
         q_vec = r_vec / rho if rho > 0 else np.zeros_like(r_vec)
@@ -112,18 +112,18 @@ class OnlineDMD:
         if add_rank:
             K = np.block([
                 [np.diag(S), p.reshape(-1, 1)],
-                [np.zeros((1, r)), np.array([[rho]])]
+                [np.zeros((1, r), dtype=np.complex128), np.array([[rho]])]
             ])  # (r+1, r+1)
 
             Ut_r, St_r, Vt_r = np.linalg.svd(K, full_matrices=True)  # K = Ut * diag(St) * Vt
             U_aug = np.column_stack((U, q_vec))
 
             # update H
-            z_old = U.T @ x_new  # (r,)
-            z_rho = np.dot(q_vec, x_new)  # scalar
+            z_old = U.conj().T @ x_new  # (r,)
+            z_rho = np.vdot(q_vec, x_new)  # scalar
             H_aug = np.block([
                 [self.H, z_old[:, None]],
-                [np.zeros((1, self.H.shape[1])), np.array([[z_rho]])]
+                [np.zeros((1, self.H.shape[1]), dtype=np.complex128), np.array([[z_rho]])]
             ])
             U_new = U_aug @ Ut_r  # (n, r)
             S_new = St_r
@@ -134,11 +134,11 @@ class OnlineDMD:
             U_new = U @ Ut_r  # (n, r)
             S_new = St_r  # (r,)
 
-            z_old = U.T @ x_new  # (r,)
+            z_old = U.conj().T @ x_new  # (r,)
             H_aug = np.column_stack([self.H, z_old[:, None]])  # (r, r+1)
 
         # H
-        H_new = Ut_r.T @ H_aug @ Vt_r.T
+        H_new = Ut_r.conj().T @ H_aug @ Vt_r.conj().T
 
         # ランク縮小（相対特異値 + エネルギー閾）
         U_new, S_new, H_new = self._truncate_rank(U_new, S_new, H_new)
