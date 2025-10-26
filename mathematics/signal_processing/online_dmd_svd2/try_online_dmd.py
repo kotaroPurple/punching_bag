@@ -67,6 +67,7 @@ def test_chirp_tracking():
         freq_evolution = []
         time_points = []
         growth_rates = []
+        amps = []
 
         # Process signal and record dominant frequency
         short_samples = 10
@@ -90,6 +91,7 @@ def test_chirp_tracking():
                     freq_evolution.append(abs(frequencies[dominant_idx]))
                     time_points.append(i * dt)
                     growth_rates.append(growth[dominant_idx])
+                    amps.append(amp_magnitudes[dominant_idx])
 
             except Exception as e:
                 print(f"Analysis failed at t={i*dt:.1f}s: {e}")
@@ -98,6 +100,7 @@ def test_chirp_tracking():
             'time': time_points,
             'frequency': freq_evolution,
             'growth_rates': growth_rates,
+            'amplitudes': amps,
             'config': config
         }
 
@@ -138,17 +141,16 @@ def test_chirp_tracking():
     axes[0, 1].grid(True, alpha=0.3)
     axes[0, 1].set_ylim(f0 * 0.8, f1 * 1.2)
 
-    # Growth rates
-    axes[1, 0].axhline(y=0, color='black', linestyle='-', alpha=0.3)
+    # Amplitudes
+    axes[1, 0].set_title('Mode Amplitudes')
     for i, (name, result) in enumerate(results.items()):
-        if result['time'] and result['growth_rates']:
+        if result['time'] and result['amplitudes']:
             axes[1, 0].plot(
-                result['time'], result['growth_rates'],
-                color=colors[i % len(colors)], marker='o', markersize=3, label=name, alpha=0.5)
-
-    axes[1, 0].set_title('Growth Rates (Stability Indicator)')
+                result['time'], result['amplitudes'],
+                color=colors[i % len(colors)], marker='o', markersize=3,
+                label=name, alpha=0.5)
     axes[1, 0].set_xlabel('Time (s)')
-    axes[1, 0].set_ylabel('Growth Rate')
+    axes[1, 0].set_ylabel('Amplitude')
     axes[1, 0].legend()
     axes[1, 0].grid(True, alpha=0.3)
 

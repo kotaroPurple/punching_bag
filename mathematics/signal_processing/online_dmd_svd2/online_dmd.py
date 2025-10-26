@@ -44,6 +44,10 @@ class OnlineDMD:
         # ストリーミング用バッファ
         self._x_prev = np.empty(0)  # 次に取り込む列
 
+    def __repr__(self) -> str:
+        current_rank = self.S.shape[0] if self.S.size > 0 else 0
+        return (f"OnlineDMD: dim={self.n}, rank={current_rank}, r_max={self.r_max}, lambda_={self.lambda_}")
+
     def initialize(self, X: NDArray) -> None:
         """
         バッチ初期化。X.shape = (n, m)
@@ -76,7 +80,6 @@ class OnlineDMD:
 
         self._x_prev = weighted_X[:, -1].copy()
 
-    # ---------------------- 更新 ----------------------
     def update(self, x_new: NDArray) -> None:
         """
         新しい観測 x_new (shape=(n,)) を投入。
@@ -144,7 +147,6 @@ class OnlineDMD:
         self.U, self.S, self.H = U_new, S_new, H_new
         self._x_prev = x_new.copy()
 
-    # ---------------------- 出力 ----------------------
     def A_tilde(self) -> None|NDArray:
         """低ランク小行列 Ã = C Σ^{-1} （shape = (r, r)）"""
         if self.U.size == 0:
@@ -160,20 +162,6 @@ class OnlineDMD:
         evals, W = np.linalg.eig(A)
         modes = self.U @ W
         return evals, modes
-
-    # ---------------------- Helper ----------------------
-    def _resize_and_decay_H(self, target_r: int, decay: float):
-        """H を λ で減衰し target_r に合わせてゼロ詰め/切り出し。"""
-        if self.H.size == 0:
-            return np.zeros((target_r, target_r))
-        H = decay * self.H
-        r_old = H.shape[0]
-        if target_r == r_old:
-            return H
-        Z = np.zeros((target_r, target_r))
-        r_min = min(target_r, r_old)
-        Z[:r_min, :r_min] = H[:r_min, :r_min]
-        return Z
 
     def get_mode_amplitudes(self, x_init: NDArray|None = None) -> NDArray:
         _, modes = self.eigs()
