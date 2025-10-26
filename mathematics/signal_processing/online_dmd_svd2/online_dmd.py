@@ -199,6 +199,84 @@ class OnlineDMD:
             raise ValueError("No modes available")
         return np.real(np.log(eigvals)) / dt
 
+    def reconstruct_signal(self, x_init: NDArray|None, n_samples: int) -> NDArray:
+        """
+        Reconstruct a signal from the learned DMD model.
+
+        Args:
+            x_init: Initial state vector (shape=(n,)). If None, uses the last stored state.
+            n_samples: Number of samples to reconstruct (>= 1).
+
+        Returns:
+            Array of reconstructed samples with shape (n, n_samples).
+        """
+        if n_samples <= 0:
+            raise ValueError("n_samples must be positive.")
+        evals, modes = self.eigs()
+        if evals is None or modes is None:
+            raise ValueError("No modes available for reconstruction.")
+        if x_init is None:
+            x_init = np.array(self._x_prev)
+        x_init = np.asarray(x_init, dtype=np.complex128).reshape(-1)
+        if x_init.shape[0] != self.n:
+            raise ValueError(f"Initial state dimension {x_init.shape[0]} does not match {self.n}.")
+        amplitudes = np.linalg.lstsq(modes, x_init, rcond=None)[0]
+        time_indices = np.arange(n_samples)
+        time_dynamics = (evals[:, None] ** time_indices) * amplitudes[:, None]
+        return modes @ time_dynamics
+
+    def reconstruct_mode_signals(
+            self,
+            n_samples: int,
+            x_init: NDArray | None = None,
+            backward: bool = False) -> NDArray:
+        """Reconstruct per-mode state contributions over time.
+
+        Args:
+            n_samples: Number of timesteps to generate (>= 1).
+            x_init: Initial state vector. Defaults to the most recent state.
+            backward: If True, propagates dynamics backward in time.
+
+        Returns:
+            Array with shape (n_modes, n, n_samples) containing complex-valued
+            contributions of each mode. Sum along axis=0 to recover the full
+            state trajectory. When no modes are available, returns an empty
+            array with shape (0, self.n, n_samples).
+        """
+        if n_samples <= 0:
+            raise ValueError("n_samples must be positive.")
+
+        eigvals, modes = self.eigs()
+        if eigvals is None or modes is None or eigvals.size == 0:
+            return np.empty((0, self.n, n_samples), dtype=np.complex128)
+
+        if x_init is None:
+            x_init = np.array(self._x_prev)
+        x_init = np.asarray(x_init, dtype=np.complex128).reshape(-1)
+        if x_init.shape[0] != self.n:
+            raise ValueError(f"Initial state dimension {x_init.shape[0]} does not match {self.n}.")
+
+        amplitudes = np.linalg.lstsq(modes, x_init, rcond=None)[0]
+        time_idx = np.arange(n_samples)
+        exponent = -time_idx if backward else time_idx
+
+        n_modes = eigvals.size
+        dynamics = np.empty((n_modes, n_samples), dtype=np.complex128)
+        if backward:
+            zero_mask = np.isclose(eigvals, 0.0)
+            nonzero_mask = ~zero_mask
+            if np.any(nonzero_mask):
+                dynamics[nonzero_mask] = eigvals[nonzero_mask, None] ** exponent
+            dynamics[zero_mask] = 0.0
+            dynamics[zero_mask, 0] = 1.0  # definition: initial sample matches amplitude
+        else:
+            dynamics = eigvals[:, None] ** exponent
+
+        modal_scalars = amplitudes[:, None] * dynamics
+        mode_vectors = modes.T[:, :, None]
+        mode_signals = mode_vectors * modal_scalars[:, None, :]
+        return mode_signals
+
     def _truncate_rank(self, U: NDArray, S: NDArray, H: NDArray):
         """Apply relative singular value + cumulative energy truncation."""
         if S.size == 0:

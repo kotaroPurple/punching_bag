@@ -4,9 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from online_dmd import OnlineDMD
 from signal_generator import SignalGenerator
-from hankel import HankelSignal, array_to_hankel_matrix
-
-
+from hankel import HankelSignal, array_to_hankel_matrix, flatten_hankel_matrix
 def test_chirp_tracking():
     """Test DMD tracking of chirp signal."""
     print("Testing Online DMD with Chirp Signal...")
@@ -96,12 +94,23 @@ def test_chirp_tracking():
             except Exception as e:
                 print(f"Analysis failed at t={i*dt:.1f}s: {e}")
 
+        # Reconstruct per-mode signals (forward and backward) from the last state
+        mode_signal_length = sample_rate  # 1 second worth of samples
+        try:
+            # (rank, window_size, signal_length)
+            forward_mode_states = dmd.reconstruct_mode_signals(mode_signal_length, backward=False)
+            backward_mode_states = dmd.reconstruct_mode_signals(mode_signal_length, backward=True)
+        except ValueError as err:
+            print(f"Mode reconstruction skipped for {config['name']}: {err}")
+
         results[config['name']] = {
             'time': time_points,
             'frequency': freq_evolution,
             'growth_rates': growth_rates,
             'amplitudes': amps,
-            'config': config
+            'config': config,
+            'forward_mode_signals': forward_mode_states,
+            'backward_mode_signals': backward_mode_states
         }
 
     # Theoretical chirp frequency
@@ -124,6 +133,25 @@ def test_chirp_tracking():
     axes[0, 0].set_xlabel('Time (s)')
     axes[0, 0].set_ylabel('Amplitude')
     axes[0, 0].grid(True, alpha=0.3)
+
+    ## reconstruct
+    for i, (name, result) in enumerate(results.items()):
+        forward_signals = result['forward_mode_signals']
+        reconstructed = None
+        if name.startswith('Starndard'):
+            continue
+        # backward_signals = result['backward_mode_signals']
+        for j in range(forward_signals.shape[0]):
+            sub_data = flatten_hankel_matrix(forward_signals[j, :, :]).real
+            if reconstructed is None:
+                reconstructed = sub_data.copy()
+            else:
+                reconstructed += sub_data
+        if reconstructed is not None:
+            axes[0, 0].plot(
+                np.arange(len(reconstructed)) * dt,
+                reconstructed,
+                color='gray', alpha=0.4)
 
     # Frequency tracking comparison
     axes[0, 1].plot(theoretical_time, theoretical_freq, 'k--', linewidth=1, label='True Frequency')
