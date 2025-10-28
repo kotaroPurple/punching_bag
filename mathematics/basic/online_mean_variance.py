@@ -4,136 +4,241 @@ from dataclasses import dataclass
 
 
 @dataclass
-class SlidingWindowStats:
+class SlidingWindowCov:
+    r"""
+    Fixed-size sliding window statistics for vector-valued signals.
+
+    Computes **moving mean vectors** and **moving covariance matrices**
+    on streaming data of shape :math:`x_t \in \mathbb{R}^d`.
+
+    This class keeps the following sufficient statistics
+    within the sliding window of width :math:`w`:
+
+    .. math::
+
+        S_t = \sum_{i=t-w+1}^{t} x_i \in \mathbb{R}^d \\
+        G_t = \sum_{i=t-w+1}^{t} x_i x_i^\top \in \mathbb{R}^{d\times d}
+
+    Then the **moving mean** :math:`\mu_t` and
+    **moving covariance** :math:`\Sigma_t` are given by:
+
+    .. math::
+
+        \mu_t = \frac{S_t}{w}, \qquad
+        \Sigma_t = \frac{G_t}{w} - \mu_t \mu_t^\top
+
+    For unbiased covariance (:math:`\mathrm{ddof}=1`):
+
+    .. math::
+
+        \Sigma_t
+        = \frac{G_t - \frac{S_t S_t^\top}{w}}{w-1}
+
+    With each new sample :math:`x_t` entering the window,
+    and the oldest sample :math:`x_{t-w}` leaving, the statistics
+    can be updated in **:math:`O(1)` time per sample**:
+
+    .. math::
+
+        S_t = S_{t-1} + x_t - x_{t-w} \\
+        G_t = G_{t-1} + x_t x_t^\top - x_{t-w} x_{t-w}^\top
+
+    Thus this class provides efficient streaming computation of
+    both **vector means** and **covariance matrices**.
+
+    Attributes:
+        w (int):
+            Window size :math:`w`.
+        d (int):
+            Dimension :math:`d` of each vector sample.
+        unbiased (bool):
+            If True, use unbiased covariance (:math:`w-1` denominator).
+        use_warmup_count (bool):
+            If True, denominators use current count until the
+            window becomes full.
+
+    Notes:
+        - :meth:`push_batch` is fully vectorized (no Python loops over samples).
+        - Supports input batch larger than the window width.
+
+    See Also:
+        mean, cov, push, push_batch
+    """
     w: int
-    unbiased: bool = False          # True: 不偏分散 (ddof=1). 窓が埋まる前は分母保護
-    use_warmup_count: bool = False  # True: ウォームアップ中(窓未満)は分母=count
+    d: int
+    unbiased: bool = False
+    use_warmup_count: bool = False
 
     def __post_init__(self):
-        if self.w <= 0:
-            raise ValueError("window size w must be positive")
-        self.buf = np.zeros(self.w, dtype=np.float64)  # リングバッファ
-        self.idx = 0               # 次に書き込む位置
-        self.count = 0             # 窓内に実際入っている要素数 (<= w)
-        self.S = 0.0               # 現在窓の一次和
-        self.Q = 0.0               # 現在窓の二次和
+        if self.w <= 0 or self.d <= 0:
+            raise ValueError("w>0 and d>0 required")
+        self.buf = np.zeros((self.w, self.d), dtype=np.float64)
+        self.idx = 0
+        self.count = 0
+        self.S = np.zeros(self.d, dtype=np.float64)
+        self.G = np.zeros((self.d, self.d), dtype=np.float64)
 
-    # --- 便利: 既存履歴を時系列順（古→新）に取り出す ---
-    def _history(self) -> np.ndarray:
+    def _history(self):
+        # 古→新の順に既存窓を取り出す
         if self.count == 0:
-            return np.empty(0, dtype=np.float64)
+            return np.empty((0, self.d), dtype=np.float64)
         if self.count < self.w:
-            # buf[0:count] に時系列順で入っている前提にしておく（後述の更新で保証）
             return self.buf[:self.count].copy()
-        # full の場合は buf[idx:] → buf[:idx] の順が古→新
-        return np.concatenate([self.buf[self.idx:], self.buf[:self.idx]]).copy()
+        return np.concatenate([self.buf[self.idx:], self.buf[:self.idx]])
 
-    # --- 単発 push（後方互換） ---
-    def push(self, x: float) -> tuple[float, float, bool]:
-        means, vars_, ready = self.push_batch(np.asarray([x], dtype=np.float64))
-        return float(means[-1]), float(vars_[-1]), bool(ready[-1])
+    def push_batch(self, X: np.ndarray):
+        X = np.asarray(X, dtype=np.float64)
 
-    # --- 配列一括 push: 連続サンプルをまとめて入れる ---
-    def push_batch(self, x_arr: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """
-        x_arr: 1D配列（floatに変換）を想定。長さNの連続データをまとめて投入。
-        戻り値:
-            means: 形状 (N,)
-            vars_: 形状 (N,)
-            ready: 形状 (N,) の bool（True: 窓が埋まった）
-        """
-        x = np.asanyarray(x_arr, dtype=np.float64).ravel()
-        N = x.size
-        if N == 0:
-            # 空なら何も変えずに空配列を返す
-            return (np.empty(0, dtype=np.float64),
-                    np.empty(0, dtype=np.float64),
-                    np.empty(0, dtype=bool))
+        # (N) -> (N,1) の二次元配列にする
+        if X.ndim == 1:
+            X = X.reshape(-1, 1)
+        # (N,d) check
+        if X.ndim != 2 or X.shape[1] != self.d:
+            raise ValueError(f"X must be (N,{self.d})")
 
-        # 直前の履歴（時系列順）
-        hist = self._history()             # 長さ H = self.count
-        H = hist.size
+        # --- 履歴 + 新データを結合 ---
+        hist = self._history()  # hist: (H,d)
+        seq = np.vstack((hist, X))  # (L,d)
+        L = seq.shape[0]
 
-        # 履歴 + 新データをつなげた列に対して prefix sums を一度だけ計算
-        seq = np.concatenate([hist, x])    # 長さ L = H + N
-        L = seq.size
-        cs1 = np.cumsum(seq)               # 一次和の累積
-        cs2 = np.cumsum(seq * seq)         # 二次和の累積
+        # --- 一次和: 累積和で区間和を作成 ---
+        cs1 = np.cumsum(seq, axis=0)  # (L,d)
 
-        # 可変窓（ウォームアップ中は win=j+1、以降は win=w）
-        # 末尾基準の区間和 S_all[j] = sum_{j-win+1..j} seq
-        # ベクトル化: まず S_all = cs1 をコピーし、j>=w について差分に置換
         S_all = cs1.copy()
-        Q_all = cs2.copy()
-        w = self.w
-        if L > w:
-            S_all[w:] = cs1[w:] - cs1[:-w]
-            Q_all[w:] = cs2[w:] - cs2[:-w]
-        # j < w の区間和は cs1[j] / cs2[j]（開始は 0）
+        if L > self.w:
+            S_all[self.w:] = cs1[self.w:] - cs1[:-self.w]
 
-        # 新しく入れた N 点に対応する出力は、j = H..H+N-1
-        idxs = np.arange(H, L)
-        # 各ステップの有効な窓長（ウォームアップ対応）
-        win = np.minimum(idxs + 1, w)          # 形状 (N,)
+        # --- 二次和: 3D累積で区間外積和を構築 ---
+        seq_outer = seq[:, :, None] * seq[:, None, :]  # (L,d,d)
+        cs2 = np.cumsum(seq_outer, axis=0)  # (L,d,d)
 
-        S = S_all[idxs]
-        Q = Q_all[idxs]
+        G_all = cs2.copy()
+        if L > self.w:
+            G_all[self.w:] = cs2[self.w:] - cs2[:-self.w]
 
+        # --- 新データ分を切り出し (窓の末尾位置 H..H+N-1) ---
+        idxs = np.arange(hist.shape[0], L)
+        S = S_all[idxs]  # (N,d)
+        G = G_all[idxs]  # (N,d,d)
+
+        # 分母（ウォームアップ対応）
+        win = np.minimum(idxs + 1, self.w).astype(np.float64)  # (N,)
         if self.use_warmup_count:
-            denom = win.astype(np.float64)
+            denom = win
         else:
-            denom = np.full(N, float(w), dtype=np.float64)
+            denom = np.full(X.shape[0], float(self.w), dtype=np.float64)  # (N,)
 
-        means = S / denom
+        # 平均
+        denom_mu = denom.reshape(-1,1)  # (N,1)
+        mu = S / denom_mu  # (N,d)
 
+        # 共分散
+        mu_outer = mu[:, :, None] * mu[:, None, :]  # (N,d,d)
         if self.unbiased:
-            # 不偏分散: (Q - S^2/denom) / max(1, denom-1)
-            d = np.maximum(1.0, denom - 1.0)
-            vars_ = (Q - (S*S)/denom) / d
+            denom_cov = np.maximum(1.0, denom-1.0).reshape(-1,1,1)  # (N,1,1)
+            cov = (G - S[:, :, None] * S[:, None, :] / denom_mu[:, :, None]) / denom_cov
         else:
-            vars_ = Q/denom - (S/denom)*(S/denom)
+            denom_cov = denom.reshape(-1,1,1)
+            cov = G / denom_cov - mu_outer
 
-        # 数値誤差の負をクリップ
-        np.maximum(vars_, 0.0, out=vars_)
+        # 数値安定化
+        cov = 0.5 * (cov + cov.transpose(0, 2, 1))  # (N,d,d)
+        diag = np.maximum(np.diagonal(cov, axis1=1, axis2=2), 0.0)  # (N,d)
+        cov[:, range(self.d), range(self.d)] = diag
 
-        # ready: 窓が埋まったか
-        ready = (win == w)
-
-        # ---- 内部状態の更新（次回のためのリングバッファ再構成）----
-        # 直近の「保持すべき」系列（最大 w 件）を取り出し、buf を時系列順で詰め直す
-        keep = min(w, L)
-        last = seq[-keep:]                      # 直近 keep サンプル（古→新）
+        # --- 内部状態更新 (直近 w 点を保持) ---
+        keep = min(self.w, L)
+        last = seq[-keep:]
         self.buf[:] = 0.0
         self.buf[:keep] = last
         self.count = keep
-        self.idx = keep % w                     # 次の書き込み位置
+        self.idx = keep % self.w
+        self.S = S[-1]
+        self.G = G[-1]
 
-        # 現在窓の S,Q（最後のステップの値）を保存
-        self.S = float(S[-1])
-        self.Q = float(Q[-1])
+        ready = (win == self.w)
+        return mu, cov, ready
 
-        return means, vars_, ready
 
-    def mean(self) -> float:
-        denom = self.count if self.use_warmup_count else self.w
-        return self.S / denom
+def _reference_moments(X, w, unbiased=False, use_warmup_count=False):
+    """
+    NumPyのみで移動平均ベクトルと移動共分散（母/不偏）を計算する基準実装。
+    出力は SlidingWindowCov.push_batch と同じ長さ N で、各時点に対して
+    ウォームアップも含めて値を出します。
 
-    def var(self) -> float:
-        denom = self.count if self.use_warmup_count else self.w
-        if self.unbiased:
-            d = max(1, denom - 1)
-            v = (self.Q - (self.S*self.S)/denom) / d
+    X: (N, d)
+    w: int
+    unbiased: bool  -> ddof = 1
+    use_warmup_count: bool -> 分母は min(t+1, w) / それ以外は常に w
+    """
+    X = np.asarray(X, dtype=np.float64)
+    N, d = X.shape
+    mu = np.zeros((N, d), dtype=np.float64)
+    cov = np.zeros((N, d, d), dtype=np.float64)
+    ready = np.zeros(N, dtype=bool)
+
+    # 逐次だが NumPy だけで書く（テスト用途なので十分高速）
+    S = np.zeros(d, dtype=np.float64)
+    G = np.zeros((d, d), dtype=np.float64)
+    buf = np.zeros((w, d), dtype=np.float64)
+    count = 0
+    idx = 0
+
+    for t in range(N):
+        x_new = X[t]
+        x_old = buf[idx].copy()
+        buf[idx] = x_new.copy()
+        idx = (idx + 1) % w
+
+        S += x_new - x_old
+        G += np.outer(x_new, x_new) - np.outer(x_old, x_old)
+        if count < w:
+            count += 1
+
+        # 分母
+        win = count if use_warmup_count else w
+        win = max(win, 1)
+
+        mu_t = S / win
+        if unbiased:
+            ddof = max(1, win - 1)
+            cov_t = (G - np.outer(S, S) / win) / ddof
         else:
-            v = self.Q/denom - (self.S/denom)**2
-        return max(0.0, v)
+            cov_t = G / win - np.outer(mu_t, mu_t)
+
+        # 数値安定（実装側と同等に）
+        cov_t = 0.5 * (cov_t + cov_t.T)
+        cov_t[np.diag_indices_from(cov_t)] = np.maximum(cov_t.diagonal(), 0.0)
+
+        mu[t] = mu_t
+        cov[t] = cov_t
+        ready[t] = (count == w)
+
+    return mu, cov, ready
 
 
 if __name__ == '__main__':
-    sw = SlidingWindowStats(w=5, unbiased=False, use_warmup_count=True)
-    m1, v1, r1 = sw.push_batch([1, 2, 3])         # 窓未満 → 分母が 1,2,3（オプション）
-    m2, v2, r2 = sw.push_batch([4, 5, 6, 7, 8])   # 窓を越えてもOK（内部でまとめて転がす）
+    rng = np.random.default_rng(42)
+    N, w, d = 513, 32, 3
+    unbiased = True
+    use_warmup_count = True
+    X = rng.normal(size=(N, d))
 
-    print(m1, v1, r1)  # 長さ3
-    print(m2, v2, r2)  # 長さ5
-    # sw.mean(), sw.var() は「直近の窓」の統計を返す
-    print(sw.mean(), sw.var())
+    sw = SlidingWindowCov(w=w, d=d, unbiased=unbiased, use_warmup_count=use_warmup_count)
+    mu, cov, ready = sw.push_batch(X)
+
+    mu_ref, cov_ref, ready_ref = _reference_moments(
+        X, w=w, unbiased=unbiased, use_warmup_count=use_warmup_count
+    )
+    print(np.allclose(mu, mu_ref))
+    print()
+
+    sub_x = X[:w, ...]
+    sub_mu = np.mean(sub_x, axis=0)
+    ddof = 1 if unbiased else 0
+    sub_cov = np.cov(sub_x, rowvar=False, ddof=ddof)
+    print("Sub-window mean:", sub_mu)
+    print("SW mean at t=w-1:", mu[w-1])
+    print("Sub-window cov:\n", sub_cov)
+    print("SW cov at t=w-1:\n", cov[w-1])
+    print("Cov close:", np.allclose(cov[w-1], sub_cov))
