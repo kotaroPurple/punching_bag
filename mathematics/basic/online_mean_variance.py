@@ -217,6 +217,52 @@ def _reference_moments(X, w, unbiased=False, use_warmup_count=False):
     return mu, cov, ready
 
 
+def _reference_moments_basic(X, w, unbiased=False, use_warmup_count=False):
+    """
+    NumPyのみで移動平均ベクトルと移動共分散（母/不偏）を計算する基準実装。
+    出力は SlidingWindowCov.push_batch と同じ長さ N で、各時点に対して
+    ウォームアップも含めて値を出します。
+
+    X: (N, d)
+    w: int
+    unbiased: bool  -> ddof = 1
+    use_warmup_count: bool -> 分母は min(t+1, w) / それ以外は常に w
+    """
+    X = np.asarray(X, dtype=np.float64)
+    if X.ndim == 1:
+        X = X.reshape(-1, 1)
+    N, d = X.shape
+    mu = np.zeros((N, d), dtype=np.float64)
+    cov = np.zeros((N, d, d), dtype=np.float64)
+    ready = np.zeros(N, dtype=bool)
+
+    for t in range(N):
+        start = max(0, t - w + 1)
+        x_win = X[start:t+1]
+        count = x_win.shape[0]
+
+        win = count if use_warmup_count else w
+        win = max(win, 1)
+
+        S = x_win.sum(axis=0, dtype=np.float64)
+        mu_t = S / win
+        G = x_win.T @ x_win
+
+        if unbiased:
+            denom_cov = max(1, win - 1)
+            cov_t = (G - np.outer(S, S) / win) / denom_cov
+        else:
+            cov_t = G / win - np.outer(mu_t, mu_t)
+
+        mu[t] = mu_t
+        cov[t] = cov_t
+
+        win = count if use_warmup_count else w
+        ready[t] = (count == w)
+
+    return mu, cov, ready
+
+
 if __name__ == '__main__':
     rng = np.random.default_rng(42)
     N, w, d = 513, 32, 3
@@ -224,21 +270,16 @@ if __name__ == '__main__':
     use_warmup_count = True
     X = rng.normal(size=(N, d))
 
-    sw = SlidingWindowCov(w=w, d=d, unbiased=unbiased, use_warmup_count=use_warmup_count)
-    mu, cov, ready = sw.push_batch(X)
+    for _unbiased, _use_warmup in [(False, False), (False, True), (True, False), (True, True)]:
+        print(f"unbiased={_unbiased}, use_warmup_count={_use_warmup}")
+        sw = SlidingWindowCov(w=w, d=d, unbiased=unbiased, use_warmup_count=use_warmup_count)
+        mu, cov, ready = sw.push_batch(X)
 
-    mu_ref, cov_ref, ready_ref = _reference_moments(
-        X, w=w, unbiased=unbiased, use_warmup_count=use_warmup_count
-    )
-    print(np.allclose(mu, mu_ref))
-    print()
-
-    sub_x = X[:w, ...]
-    sub_mu = np.mean(sub_x, axis=0)
-    ddof = 1 if unbiased else 0
-    sub_cov = np.cov(sub_x, rowvar=False, ddof=ddof)
-    print("Sub-window mean:", sub_mu)
-    print("SW mean at t=w-1:", mu[w-1])
-    print("Sub-window cov:\n", sub_cov)
-    print("SW cov at t=w-1:\n", cov[w-1])
-    print("Cov close:", np.allclose(cov[w-1], sub_cov))
+        # mu_ref, cov_ref, ready_ref = _reference_moments(
+        mu_ref, cov_ref, ready_ref = _reference_moments_basic(
+            X, w=w, unbiased=unbiased, use_warmup_count=use_warmup_count
+        )
+        print('mu', np.allclose(mu, mu_ref))
+        print('cov', np.allclose(cov, cov_ref))
+        print('ready', np.array_equal(ready, ready_ref))
+        print()
