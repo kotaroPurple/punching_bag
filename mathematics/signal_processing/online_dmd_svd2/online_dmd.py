@@ -28,13 +28,15 @@ class OnlineDMD:
             lambda_: float = 1.0,
             tau_add: float = 1e-2,
             tau_rel: float = 1e-3,
-            tau_energy: float = 0.99) -> None:
+            tau_energy: float = 0.99,
+            mean_center: bool = True) -> None:
         self.n = int(n_dim)
         self.r_max = int(r_max)
         self.lambda_ = float(lambda_)
         self.tau_add = float(tau_add)
         self.tau_rel = float(tau_rel)
         self.tau_energy = float(tau_energy)
+        self.mean_center = bool(mean_center)
 
         # 保持するのは U, S, C のみ（V は保持しない）
         self.U = np.empty(0, dtype=np.complex128)  # (n, r)
@@ -43,6 +45,9 @@ class OnlineDMD:
 
         # ストリーミング用バッファ
         self._x_prev = np.empty(0, dtype=np.complex128)  # 次に取り込む列
+        self._mean = np.zeros(self.n, dtype=np.complex128)
+        self._mean_acc = np.zeros(self.n, dtype=np.complex128)
+        self._weight_sum = 0.0
 
     def __repr__(self) -> str:
         current_rank = self.S.shape[0] if self.S.size > 0 else 0
@@ -60,9 +65,25 @@ class OnlineDMD:
         if n != self.n:
             raise ValueError(f"Input X has incompatible dimension {n}, expected {self.n}")
 
+        # 平均統計量を初期化
+        self._mean[:] = 0.0
+        self._mean_acc[:] = 0.0
+        self._weight_sum = 0.0
+
+        if self.mean_center:
+            processed_X = np.empty_like(X, dtype=np.complex128)
+            for idx in range(m):
+                x_col = X[:, idx]
+                self._mean_acc = self.lambda_ * self._mean_acc + x_col
+                self._weight_sum = self.lambda_ * self._weight_sum + 1.0
+                self._mean = self._mean_acc / max(self._weight_sum, 1e-15)
+                processed_X[:, idx] = x_col - self._mean
+        else:
+            processed_X = X.copy()
+
         # 忘却係数処理
         coeff_array = self.lambda_ ** np.arange(m - 1, -1, -1)
-        weighted_X = X * coeff_array
+        weighted_X = processed_X * coeff_array
 
         # U, S, Vt = np.linalg.svd(X, full_matrices=True)
         U, S, Vt = np.linalg.svd(weighted_X[:, :-1] * self.lambda_, full_matrices=True)
@@ -86,12 +107,21 @@ class OnlineDMD:
         直前の x_prev を SVD に取り込み → 小 SVD の Vt から v_last を取り出し → x_new で C を rank-1 更新。
         initialize が呼ばれていることを前提とする。
         """
-        x_new = np.asarray(x_new, dtype=np.complex128).reshape(-1)
-        assert x_new.shape[0] == self.n
+        x_new_raw = np.asarray(x_new, dtype=np.complex128).reshape(-1)
+        assert x_new_raw.shape[0] == self.n
         if self.U.size == 0:
             raise RuntimeError("OnlineDMD must be initialized with initialize() before update().")
 
-        # ここから毎回: x_prev を取り込み、x_new で H を更新
+        if self.mean_center:
+            # 平均統計量を更新し中心化した観測を取得
+            self._mean_acc = self.lambda_ * self._mean_acc + x_new_raw
+            self._weight_sum = self.lambda_ * self._weight_sum + 1.0
+            self._mean = self._mean_acc / max(self._weight_sum, 1e-15)
+            x_new_proc = x_new_raw - self._mean
+        else:
+            x_new_proc = x_new_raw
+
+        # ここから毎回: x_prev（中心化済み）を取り込み、x_new で H を更新
         x_prev = self._x_prev
         U, S = self.U, self.S
         r = S.shape[0]
@@ -119,8 +149,8 @@ class OnlineDMD:
             U_aug = np.column_stack((U, q_vec))
 
             # update H
-            z_old = U.conj().T @ x_new  # (r,)
-            z_rho = np.vdot(q_vec, x_new)  # scalar
+            z_old = U.conj().T @ x_new_proc  # (r,)
+            z_rho = np.vdot(q_vec, x_new_proc)  # scalar
             H_aug = np.block([
                 [self.H, z_old[:, None]],
                 [np.zeros((1, self.H.shape[1]), dtype=np.complex128), np.array([[z_rho]])]
@@ -134,7 +164,7 @@ class OnlineDMD:
             U_new = U @ Ut_r  # (n, r)
             S_new = St_r  # (r,)
 
-            z_old = U.conj().T @ x_new  # (r,)
+            z_old = U.conj().T @ x_new_proc  # (r,)
             H_aug = np.column_stack([self.H, z_old[:, None]])  # (r, r+1)
 
         # H
@@ -145,7 +175,7 @@ class OnlineDMD:
 
         # 保存
         self.U, self.S, self.H = U_new, S_new, H_new
-        self._x_prev = x_new.copy()
+        self._x_prev = x_new_proc.copy()
 
     def A_tilde(self) -> None|NDArray:
         """低ランク小行列 Ã = C Σ^{-1} （shape = (r, r)）"""
