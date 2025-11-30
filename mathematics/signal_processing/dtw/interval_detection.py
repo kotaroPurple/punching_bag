@@ -12,11 +12,12 @@ from scipy.spatial.distance import cdist
 
 @dataclass
 class GeneratedSignal:
-    """Container for a generated signal and its instantaneous frequency."""
+    """Container for generated signals."""
 
     time: np.ndarray
     values: np.ndarray
     instantaneous_freq: np.ndarray
+    clean_values: np.ndarray | None = None
 
 
 def generate_timebase(duration: float, sample_rate: float) -> np.ndarray:
@@ -37,6 +38,12 @@ def generate_slowly_drifting_signal(
     sample_rate: float,
     base_freq: float,
     freq_drift: float,
+    noise_std: float = 0.0,
+    pulse_count: int = 0,
+    pulse_width: float = 0.01,
+    pulse_amplitude: float = 0.8,
+    pulse_times: np.ndarray | None = None,
+    seed: int | None = 0,
 ) -> GeneratedSignal:
     """Generate a signal whose instantaneous frequency drifts linearly."""
 
@@ -47,8 +54,72 @@ def generate_slowly_drifting_signal(
 
     # Integrate instantaneous frequency to obtain the phase
     phase = 2.0 * np.pi * np.cumsum(instantaneous_freq) / sample_rate
-    values = np.sin(phase)
-    return GeneratedSignal(time=time, values=values, instantaneous_freq=instantaneous_freq)
+    clean_values = np.sin(phase)
+
+    rng = np.random.default_rng(seed)
+    noisy_values = clean_values.copy()
+    if noise_std > 0.0:
+        noisy_values += rng.normal(scale=noise_std, size=noisy_values.shape)
+
+    if (pulse_count > 0 or (pulse_times is not None and pulse_times.size > 0)) and pulse_width > 0.0 and pulse_amplitude != 0.0:
+        pulses = _generate_sparse_pulses(
+            num_samples=time.size,
+            sample_rate=sample_rate,
+            rng=rng,
+            pulse_count=pulse_count,
+            pulse_width=pulse_width,
+            pulse_amplitude=pulse_amplitude,
+            pulse_times=pulse_times,
+        )
+        noisy_values += pulses
+
+    return GeneratedSignal(
+        time=time,
+        values=noisy_values,
+        instantaneous_freq=instantaneous_freq,
+        clean_values=clean_values,
+    )
+
+
+def _generate_sparse_pulses(
+    num_samples: int,
+    sample_rate: float,
+    rng: np.random.Generator,
+    pulse_count: int,
+    pulse_width: float,
+    pulse_amplitude: float,
+    pulse_times: np.ndarray | None = None,
+) -> np.ndarray:
+    """Create sparse transient pulses to mimic measurement artifacts."""
+
+    pulses = np.zeros(num_samples, dtype=float)
+    width_samples = max(1, int(round(pulse_width * sample_rate)))
+    window_length = max(2, 2 * width_samples)
+    window = np.hanning(window_length)
+
+    if num_samples <= window_length:
+        pulses += pulse_amplitude * window[:num_samples]
+        return pulses
+
+    if pulse_times is not None and pulse_times.size > 0:
+        centers = np.clip((pulse_times * sample_rate).astype(int), width_samples, num_samples - width_samples - 1)
+    else:
+        valid_indices = np.arange(width_samples, num_samples - width_samples)
+        if valid_indices.size == 0 or pulse_count <= 0:
+            return pulses
+
+        replace = pulse_count > valid_indices.size
+        centers = rng.choice(valid_indices, size=pulse_count, replace=replace)
+
+    half_window = window_length // 2
+    for center in centers:
+        start = max(0, center - half_window)
+        end = min(num_samples, center + half_window)
+        window_start = half_window - (center - start)
+        window_end = window_start + (end - start)
+        pulses[start:end] += pulse_amplitude * window[window_start:window_end]
+
+    return pulses
 
 
 def _dtw_path(template: np.ndarray, signal: np.ndarray) -> Tuple[float, Tuple[np.ndarray, np.ndarray]]:
@@ -145,7 +216,18 @@ def run_demo() -> None:
 
     time = generate_timebase(duration, sample_rate)
     template = generate_template(time, base_freq)
-    generated = generate_slowly_drifting_signal(time, sample_rate, base_freq, drift)
+    generated = generate_slowly_drifting_signal(
+        time,
+        sample_rate,
+        base_freq,
+        drift,
+        noise_std=0.08,
+        pulse_count=0,
+        pulse_width=0.002,
+        pulse_amplitude=0.5,
+        pulse_times=np.array([0.45, 1.65]),
+        seed=42,
+    )
 
     cycle_start_times, intervals = estimate_cycle_intervals(
         template,
