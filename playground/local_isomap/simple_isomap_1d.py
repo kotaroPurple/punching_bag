@@ -48,6 +48,7 @@ def main() -> None:
     t = np.arange(T)
 
     theta = 0.8 * np.sin(2*np.pi*0.01*t)         # oscillate along an arc
+    theta += 0.1 * np.sin(2*np.pi*0.1*t)
     r = 1.0 + 0.03*np.sin(2*np.pi*0.003*t)       # slow drift in radius
     z = r * np.exp(1j * theta)
     z = z + 0.03*(np.random.randn(T) + 1j*np.random.randn(T))  # noise
@@ -73,7 +74,7 @@ def main() -> None:
 
     # ---- Visualization 2: 1D coordinate s(t) ----
     plt.figure()
-    plt.plot(t, theta, alpha=0.7)
+    # plt.plot(t, theta, alpha=0.7)
     plt.plot(t, s, alpha=0.7)
     plt.xlabel("time index t")
     plt.ylabel("s(t)")
