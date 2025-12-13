@@ -57,7 +57,7 @@ def main() -> None:
 
     # ---- Visualization 1: trajectory in IQ plane + a few tangent vectors ----
     plt.figure()
-    plt.plot(x[:,0], x[:,1])
+    plt.plot(x[:,0], x[:,1], alpha=0.5)
     plt.xlabel("Re(z)")
     plt.ylabel("Im(z)")
     plt.title("Trajectory in IQ plane (Re vs Im)")
