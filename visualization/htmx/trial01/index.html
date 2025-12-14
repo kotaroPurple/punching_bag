@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HTMX × FastAPI Mini Demo</title>
+  <script src="https://unpkg.com/htmx.org@2.0.3"></script>
+  <style>
+    :root {
+      font-family: "Noto Sans", "Hiragino Sans", system-ui, -apple-system, sans-serif;
+      color: #0f172a;
+      background: #f8fafc;
+    }
+    body {
+      max-width: 720px;
+      margin: 48px auto;
+      padding: 0 20px;
+      line-height: 1.6;
+    }
+    h1 {
+      font-size: 1.8rem;
+      margin-bottom: 0.5rem;
+    }
+    .card {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 14px 16px;
+      box-shadow: 0 4px 18px rgba(0,0,0,0.04);
+      margin-top: 10px;
+    }
+    button {
+      background: #0ea5e9;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 10px 16px;
+      cursor: pointer;
+      font-weight: 600;
+      box-shadow: 0 10px 30px rgba(14,165,233,0.25);
+    }
+    button:hover { background: #0284c7; }
+    form { display: grid; gap: 10px; margin-top: 6px; }
+    input[type="text"] {
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid #cbd5e1;
+    }
+  </style>
+</head>
+<body>
+  <h1>HTMX × FastAPI ミニマム例</h1>
+  <p>下のボタンとフォームは、ページ遷移なしでサーバーから HTML 断片を受け取ります。</p>
+
+  <section class="card">
+    <h2>1) 現在時刻を取得</h2>
+    <p>クリックすると <code>/time</code> に GET し、返ってきた HTML に差し替えます。</p>
+    <button hx-get="/time" hx-target="#time-panel" hx-swap="innerHTML">今すぐ取得</button>
+    <div id="time-panel" class="card" style="background:#f1f5f9; border-style:dashed;">ここに時刻が入ります</div>
+  </section>
+
+  <section class="card">
+    <h2>2) メッセージをエコー</h2>
+    <p>フォーム送信で <code>/echo</code> に POST、結果を下の枠に差し替えます。</p>
+    <form hx-post="/echo" hx-target="#echo-panel" hx-swap="innerHTML">
+      <input type="text" name="message" placeholder="好きなテキストを入力" required />
+      <button type="submit">送信</button>
+    </form>
+    <div id="echo-panel" class="card" style="background:#f1f5f9; border-style:dashed;">ここに返信が表示されます</div>
+  </section>
+</body>
+</html>
