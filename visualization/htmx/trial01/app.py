@@ -1,3 +1,9 @@
+
+"""How to Run
+
+>>> uvicorn visualization.htmx.trial01.app:app --reload --port 8000
+"""
+
 from pathlib import Path
 from fastapi import FastAPI, Form
 from fastapi.responses import FileResponse, HTMLResponse

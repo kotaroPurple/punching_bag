@@ -1,3 +1,9 @@
+
+"""How to Run
+
+>>> uvicorn visualization.htmx.trial02.app:app --reload --port 8001
+"""
+
 from pathlib import Path
 from io import BytesIO
 import base64
