@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HTMX × FastAPI Plot Demo</title>
+  <script src="https://unpkg.com/htmx.org@2.0.3"></script>
+  <style>
+    :root {
+      font-family: "Noto Sans", "Hiragino Sans", system-ui, -apple-system, sans-serif;
+      color: #0f172a;
+      background: #f8fafc;
+    }
+    body {
+      max-width: 780px;
+      margin: 48px auto;
+      padding: 0 20px;
+      line-height: 1.6;
+    }
+    h1 { margin-bottom: 0.4rem; }
+    .card {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 14px 16px;
+      box-shadow: 0 4px 18px rgba(0,0,0,0.04);
+      margin-top: 14px;
+    }
+    button {
+      background: #0ea5e9;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 10px 16px;
+      cursor: pointer;
+      font-weight: 600;
+      box-shadow: 0 10px 30px rgba(14,165,233,0.25);
+    }
+    button:hover { background: #0284c7; }
+    .plot-wrap { display: flex; justify-content: center; }
+    img { max-width: 100%; height: auto; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <h1>HTMX × FastAPI: 簡単なプロット生成</h1>
+  <p>ボタンクリックでサーバーが matplotlib でプロットを生成し、HTML 断片として差し替えます。ページ全体のリロードは不要です。</p>
+
+  <section class="card">
+    <h2>プロットを取得</h2>
+    <p>毎回乱数ノイズ入りの sin 波を描き、PNG を data URI で返します。</p>
+    <button hx-get="/plot" hx-target="#plot-area" hx-swap="innerHTML">プロット生成</button>
+    <div id="plot-area" class="card" style="background:#f1f5f9; border-style:dashed;">ここに画像が入ります</div>
+  </section>
+</body>
+</html>
