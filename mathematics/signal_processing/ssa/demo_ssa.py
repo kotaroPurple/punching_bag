@@ -12,10 +12,10 @@ def generate_data() -> tuple[NDArray[np.float64], NDArray[np.float64], list[NDAr
     fs = 100.0  # [Hz]
     duration = 10.0  # [s]
     times = np.arange(0, duration, 1 / fs)
-    trend = 0.02 * (times - duration / 2) ** 2 + 0.3
+    trend = 0.01 * (times - duration / 2) ** 2 + 0.3
     # frequency components
     wave1 = 0.05 * np.sin(2 * np.pi * 1.0 * times)  # 1.0 Hz
-    wave1 *= 1 + 0.3 * np.abs(times - duration / 2)  # amplitude modulation
+    wave1 *= 1 + 0.2 * np.abs(times - duration / 2)  # amplitude modulation
     wave2 = 0.04 * np.sin(2 * np.pi * 2.0 * times + np.pi / 2)  # 2.0 Hz
     wave2 *= 1 - 0.2 * np.abs(times - duration / 2)  # amplitude modulation
     # noise
@@ -40,13 +40,21 @@ def main() -> None:
 
     # components
     u_mat, s, vt_mat = ssa_model.get_svd()
-    u_vectors = u_mat[:, 0:6:2]
+
+    print("Singular values:")
+    print(s[:10])
+
+    ## 累積寄与率のプロット
+    cumulative_contribution = np.cumsum(s**2) / np.sum(s**2)
+    print(cumulative_contribution[:10])
+
+    u_vectors = u_mat[:, 0:6:1]
     plt.figure()
     for i in range(u_vectors.shape[1]):
         plt.plot(np.arange(len(u_vectors[:, i])) / 100, u_vectors[:, i], label=f"U Vector {i}")
     plt.show()
 
-    v_vectors = vt_mat[0:6:2, :].T
+    v_vectors = vt_mat[0:6:1, :].T
     plt.figure()
     for i in range(v_vectors.shape[1]):
         plt.plot(np.arange(len(v_vectors[:, i])) / 100, v_vectors[:, i], label=f"V Vector {i}")
