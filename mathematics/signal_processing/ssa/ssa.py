@@ -1,10 +1,10 @@
 
-from __future__ import annotations
+"""Singular Spectrum Analysis (SSA) implementation."""
 
-from typing import Iterable, Sequence
+from typing import Sequence
 
 import numpy as np
-import numpy.typing as npt
+from numpy.typing import NDArray
 
 
 class SSA:
@@ -13,19 +13,15 @@ class SSA:
     Args:
         window_length: Window length for Hankel embedding.
     """
-
     def __init__(self, window_length: int) -> None:
         self.window_length = int(window_length)
-        self.u: npt.NDArray[np.floating] | None = None
-        self.s: npt.NDArray[np.floating] | None = None
-        self.vt: npt.NDArray[np.floating] | None = None
-        self._hankel_matrix: npt.NDArray[np.floating] | None = None
+        self.u: NDArray[np.floating] | None = None
+        self.s: NDArray[np.floating] | None = None
+        self.vt: NDArray[np.floating] | None = None
+        self._hankel_matrix: NDArray[np.floating] | None = None
 
-    @staticmethod
     def _hankel(
-        series: npt.ArrayLike,
-        window_length: int,
-    ) -> npt.NDArray[np.floating]:
+            self, series: NDArray[np.floating], window_length: int) -> NDArray[np.floating]:
         """Build a Hankel matrix from a 1D series.
 
         Args:
@@ -42,8 +38,7 @@ class SSA:
             raise ValueError("window_length must satisfy 1 <= window_length <= len(series)")
         return np.column_stack([series[i:i + window_length] for i in range(column_count)])
 
-    @staticmethod
-    def _diagonal_averaging(matrix: npt.NDArray[np.floating]) -> npt.NDArray[np.floating]:
+    def _diagonal_averaging(self, matrix: NDArray[np.floating]) -> NDArray[np.floating]:
         """Reconstruct a series by diagonal averaging.
 
         Args:
@@ -62,7 +57,7 @@ class SSA:
                 weights[row_index + column_index] += 1
         return values / weights
 
-    def fit(self, series: npt.ArrayLike) -> "SSA":
+    def fit(self, series: NDArray[np.floating]) -> "SSA":
         """Fit the SSA model to a 1D series.
 
         Args:
@@ -75,7 +70,7 @@ class SSA:
         self.u, self.s, self.vt = np.linalg.svd(self._hankel_matrix, full_matrices=False)
         return self
 
-    def reconstruct(self, indices: int | Sequence[int] | npt.NDArray[np.integer]) -> npt.NDArray[np.floating]:
+    def reconstruct(self, indices: int | Sequence[int] | NDArray[np.integer]) -> NDArray[np.floating]:
         """Reconstruct a component or components from the SSA decomposition.
 
         Args:
@@ -86,7 +81,7 @@ class SSA:
         """
         if self.u is None or self.s is None or self.vt is None:
             raise ValueError("Call fit(x) before reconstruct().")
-        if np.isscalar(indices):
+        if isinstance(indices, int):
             component_index = int(indices)
             reconstructed_matrix = self.s[component_index] * np.outer(
                 self.u[:, component_index],
@@ -99,51 +94,12 @@ class SSA:
             ) @ self.vt[component_indices]
         return self._diagonal_averaging(reconstructed_matrix)
 
+    def get_svd(self) -> tuple[NDArray[np.floating], NDArray[np.floating], NDArray[np.floating]]:
+        """Get the SVD components of the fitted Hankel matrix.
 
-def ssa(series: npt.ArrayLike, window_length: int) -> tuple[
-    npt.NDArray[np.floating],
-    npt.NDArray[np.floating],
-    npt.NDArray[np.floating],
-]:
-    """Compute SSA decomposition for a 1D series.
-
-    Args:
-        series: Input 1D series.
-        window_length: Window length for Hankel embedding.
-
-    Returns:
-        Tuple of (u, s, vt) from the SVD.
-    """
-    model = SSA(window_length).fit(series)
-    return model.u, model.s, model.vt
-
-
-def reconstruct(
-    u: npt.NDArray[np.floating],
-    s: npt.NDArray[np.floating],
-    vt: npt.NDArray[np.floating],
-    indices: int | Sequence[int] | npt.NDArray[np.integer],
-) -> npt.NDArray[np.floating]:
-    """Reconstruct a series from SSA components.
-
-    Args:
-        u: Left singular vectors.
-        s: Singular values.
-        vt: Right singular vectors (transposed).
-        indices: Singular component index or indices.
-
-    Returns:
-        Reconstructed 1D series.
-    """
-    if np.isscalar(indices):
-        component_index = int(indices)
-        reconstructed_matrix = s[component_index] * np.outer(
-            u[:, component_index],
-            vt[component_index],
-        )
-    else:
-        component_indices = np.asarray(indices, dtype=int)
-        reconstructed_matrix = (u[:, component_indices] * s[component_indices]) @ vt[
-            component_indices
-        ]
-    return SSA._diagonal_averaging(reconstructed_matrix)
+        Returns:
+            Tuple of (U, S, VT) from the SVD.
+        """
+        if self.u is None or self.s is None or self.vt is None:
+            raise ValueError("Call fit(x) before get_svd().")
+        return self.u, self.s, self.vt
