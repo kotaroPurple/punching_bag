@@ -84,7 +84,7 @@ def main() -> None:
         displacement = generate_displacement(amp, freq, duration, sample_rate, start=0.001)
         total_displacement += displacement
     total_displacement += generate_gaussian_displacement(-0.000_1, frequencies[0], center_time=0.125, sigma=0.05, duration=duration, sample_rate=sample_rate)
-    total_displacement += generate_gaussian_displacement(0.000_05, frequencies[0], center_time=0.625, sigma=0.05, duration=duration, sample_rate=sample_rate)
+    total_displacement += generate_gaussian_displacement(0.000_07, frequencies[0], center_time=0.625, sigma=0.05, duration=duration, sample_rate=sample_rate)
     # generate IQ signal
     iq_signal = generate_iq_from_displacement(total_displacement)
     # iq_theory = generate_iq_with_theory(
@@ -101,6 +101,10 @@ def main() -> None:
 
     filtered_iq_signal[:int(sample_rate)] = 0
     filtered_iq_signal[-int(sample_rate):] = 0
+
+    n_conv = int(0.3 * sample_rate)
+    abs_filtered = np.abs(filtered_iq_signal)
+    mv_abs_filtered = np.convolve(abs_filtered, np.ones(n_conv) / n_conv, mode='same')
 
     # plot
     _, axes = plt.subplots(3, 1, figsize=(12, 8), sharex=True)
@@ -119,7 +123,8 @@ def main() -> None:
 
     axes[2].plot(time, filtered_iq_signal.real, label='I Component', alpha=0.5)
     axes[2].plot(time, filtered_iq_signal.imag, label='Q Component', alpha=0.5)
-    axes[2].plot(time, np.abs(filtered_iq_signal), label='Magnitude', alpha=0.5, c='gray')
+    axes[2].plot(time, abs_filtered, label='Magnitude', alpha=0.5, c='gray')
+    axes[2].plot(time, mv_abs_filtered, label='Magnitude (Moving Avg)', alpha=0.8, c='black')
     # axes[2].plot(time, filtered_iq_theory.real, label='I Component (Theory)', alpha=0.5, linestyle='--')
     # axes[2].plot(time, filtered_iq_theory.imag, label='Q Component (Theory)', alpha=0.5, linestyle='--')
     axes[2].set_title("Filtered IQ Signal")
