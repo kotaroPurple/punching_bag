@@ -74,9 +74,14 @@ def main() -> None:
     # displacement parameters
     # amplitudes = [0.000_2, 0.001]  # [m]
     # frequencies = [1.1, 0.2]  # [Hz]
-    amplitudes = [0.000_2]  # [m]
-    frequencies = [1.0]  # [Hz]
-    duration = 20.0  # [s]
+    # amplitudes = [0.000_2]  # [m]
+    # frequencies = [1.0]  # [Hz]
+    # duration = 20.0  # [s]
+
+    amplitudes = [0.020]  # [m]
+    frequencies = [1 / 30.]  # [Hz]
+    duration = 60.0  # [s]
+
     sample_rate = 100.0  # [Hz]
     # generate displacement
     total_displacement = np.zeros(int(duration * sample_rate))
