@@ -12,7 +12,7 @@ def generate_data() -> tuple[NDArray[np.float64], NDArray[np.float64], list[NDAr
     fs = 100.0  # [Hz]
     duration = 10.0  # [s]
     times = np.arange(0, duration, 1 / fs)
-    trend = 0.01 * (times - duration / 2) ** 2 + 0.3
+    trend = 0.2 * np.sin(2 * np.pi * 0.1 * times + np.pi / 2)
     # frequency components
     wave1 = 0.05 * np.sin(2 * np.pi * 1.0 * times)  # 1.0 Hz
     wave1 *= 1 + 0.2 * np.abs(times - duration / 2)  # amplitude modulation
