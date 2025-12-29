@@ -30,7 +30,7 @@ def main() -> None:
     window_length = 150
     ssa_model = SSA(window_length=window_length)
     ssa_model.fit(data)
-    reconstructed_trend = ssa_model.reconstruct([0, 1, 2, 3])
+    reconstructed = ssa_model.reconstruct([0, 1, 2, 3, 4, 5])
 
     # reconstruction
     indices = [[0, 1], [2, 3], [4, 5]]
@@ -41,38 +41,58 @@ def main() -> None:
     # components
     u_mat, s, vt_mat = ssa_model.get_svd()
 
-    print("Singular values:")
-    print(s[:10])
+    # data
+    plt.figure()
+    plt.plot(times, data, c='gray', label='Data', alpha=0.7)
+    plt.plot(times, components[0], label='Trend', c='C0', alpha=0.7)
+    plt.plot(times, components[1], label='Wave 1', c='C1', alpha=0.7)
+    plt.plot(times, components[2], label='Wave 2', c='C2', alpha=0.7)
+    plt.xlabel("Time [s]")
 
-    ## 累積寄与率のプロット
-    cumulative_contribution = np.cumsum(s**2) / np.sum(s**2)
-    print(cumulative_contribution[:10])
+    # reconstruction
+    plt.figure(figsize=(10, 6))
+    plt.plot(times, data, label="Original Data", alpha=0.7, c='gray')
+    plt.plot(times, reconstructed, label="Reconstructed Trend (SSA)", color='purple', alpha=0.5)
+    plt.xlabel("Time [s]")
+
+    # compare components
+    _, axes = plt.subplots(3, 1, figsize=(10, 6), sharex=True)
+    axes[0].plot(times, components[0], label='Original', c='gray', alpha=0.7)
+    axes[0].plot(times, reconstructions[0], label='Reconstructed', c='purple', alpha=0.5)
+    axes[0].legend()
+    axes[1].plot(times, components[1], label='Original', c='gray', alpha=0.7)
+    axes[1].plot(times, reconstructions[1], label='Reconstructed', c='purple', alpha=0.5)
+    axes[1].legend()
+    axes[2].plot(times, components[2], label='Original', c='gray', alpha=0.7)
+    axes[2].plot(times, reconstructions[2], label='Reconstructed', c='purple', alpha=0.5)
+    axes[2].legend()
+    axes[2].set_xlabel("Time [s]")
 
     u_vectors = u_mat[:, 0:6:1]
-    plt.figure()
+    plt.figure(figsize=(10, 6))
     for i in range(u_vectors.shape[1]):
-        plt.plot(np.arange(len(u_vectors[:, i])) / 100, u_vectors[:, i], label=f"U Vector {i}")
-    plt.show()
+        plt.plot(np.arange(len(u_vectors[:, i])) / 100, u_vectors[:, i], label=f"U Vector {i}", alpha=0.7)
+    plt.xlabel("Time [s]")
+    plt.legend()
 
     v_vectors = vt_mat[0:6:1, :].T
-    plt.figure()
+    plt.figure(figsize=(10, 6))
     for i in range(v_vectors.shape[1]):
-        plt.plot(np.arange(len(v_vectors[:, i])) / 100, v_vectors[:, i], label=f"V Vector {i}")
-    plt.show()
+        plt.plot(np.arange(len(v_vectors[:, i])) / 100, v_vectors[:, i], label=f"V Vector {i}", alpha=0.7)
+    plt.xlabel("Time [s]")
+    plt.legend()
 
     # plot results
     plt.figure(figsize=(10, 6))
-    plt.plot(times, data, label="Original Data", alpha=0.6)
-    plt.plot(times, reconstructed_trend, label="Reconstructed Trend (SSA)", color='orange', alpha=0.6)
+    plt.plot(times, data, label="Original Data", c='gray', alpha=0.6)
+    plt.plot(times, reconstructed, label="Reconstructed", color='purple', alpha=0.6)
     for i, recon in zip(indices, reconstructions):
-        plt.plot(times, recon, label=f"Component {i}", linestyle='--', alpha=0.7)
-    for i, comp in enumerate(components):
-        if i >= 3:
-            break
-        plt.plot(times, comp, label=f"True Component {i}", c='gray', alpha=0.7)
+        plt.plot(times, recon, label=f"Reconstructed {i}", linestyle='--', alpha=0.7)
+    # for i, comp in enumerate(components):
+    #     if i >= 3:
+    #         break
+    #     plt.plot(times, comp, label=f"True Component {i}", c='gray', alpha=0.7)
     plt.xlabel("Time [s]")
-    plt.ylabel("Displacement")
-    plt.title("SSA Trend Extraction Demo")
     plt.legend()
 
     plt.show()
