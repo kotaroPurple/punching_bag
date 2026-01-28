@@ -45,6 +45,32 @@ def extract_side_band_frequency(
     return shifted, filtered, result
 
 
+def extract_positive_band_fft(
+        data: NDArray,
+        fs: float,
+        f_low: float,
+        f_high: float,
+        analytic: bool = True,
+) -> NDArray:
+    """Keep only positive-frequency components in [f_low, f_high] via FFT masking."""
+    if not (0.0 <= f_low < f_high <= fs * 0.5):
+        raise ValueError("Require 0 <= f_low < f_high <= Nyquist.")
+    n = len(data)
+    freqs = np.fft.fftfreq(n, d=1.0 / fs)
+    spectrum = np.fft.fft(data)
+
+    mask = (freqs >= f_low) & (freqs <= f_high)
+    spectrum *= mask
+
+    # If input is real, doubling positive frequencies keeps amplitude of the analytic signal.
+    if analytic and not np.iscomplexobj(data):
+        nyq = fs * 0.5
+        pos_mask = (freqs > 0.0) & (freqs < nyq)
+        spectrum[pos_mask] *= 2.0
+
+    return np.fft.ifft(spectrum)
+
+
 def main() -> None:
     # Signal parameters
     fs_hz = 100.0
@@ -64,12 +90,15 @@ def main() -> None:
     filtered_iq = bandpass_filter(iq_data, fs_hz=fs_hz, low_hz=low_hz, high_hz=high_hz, order=4)
     freq_shifted, lowpassed, side_iq = extract_side_band_frequency(
         iq_data, fs=int(fs_hz), f_low=low_hz, f_high=high_hz, order=4)
+    pos_band_iq = extract_positive_band_fft(
+        iq_data, fs=fs_hz, f_low=0., f_high=1.5, analytic=False)
 
     ignore_index = (t < 0.35) + (t > duration_s - 0.35)
     iq_data[ignore_index] = 0.0 + 0.0j
     filtered_iq[ignore_index] = 0.0 + 0.0j
     lowpassed[ignore_index] = 0.0 + 0.0j
     side_iq[ignore_index] = 0.0 + 0.0j
+    pos_band_iq[ignore_index] = 0.0 + 0.0j
 
     fig, axes = plt.subplots(2, 2, figsize=(12, 6), sharex=True)
     axes[0, 0].plot(t, iq_data.real, label="I", alpha=0.7)
@@ -90,6 +119,7 @@ def main() -> None:
     # axes[0, 1].plot(t, lowpassed.real, label="lowpassed I", alpha=0.5)
     axes[0, 1].plot(t, side_iq.real, label="side_iq I", alpha=0.5)
     axes[0, 1].plot(t, np.abs(side_iq), label="Magnitude", alpha=0.5, c="gray")
+    axes[0, 1].plot(t, np.abs(pos_band_iq), label="Pos-only Mag (FFT)", alpha=0.5, c="tab:green")
     axes[0, 1].set_title("Filtered I channel during side-band extraction")
     axes[0, 1].set_xlabel("Time [s]")
     axes[0, 1].set_ylabel("Amplitude")
