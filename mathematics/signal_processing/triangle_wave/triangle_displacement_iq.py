@@ -278,6 +278,8 @@ def main() -> None:
     # calculate FFT spectrum
     freqs_pos, spectrum_pos = calculate_fft_magnitude(np.abs(side_iq_positive) - np.mean(np.abs(side_iq_positive)), fs=fs_hz)
     freqs_neg, spectrum_neg = calculate_fft_magnitude(np.abs(side_iq_negative) - np.mean(np.abs(side_iq_negative)), fs=fs_hz)
+    freqs_both, spectrum_both = calculate_fft_magnitude(
+        np.abs(filtered_iq) - np.mean(np.abs(filtered_iq)), fs=fs_hz)
 
     # calculate SFM and NPWE
     sfm_positive = spectrum_flatness_measure(
@@ -288,6 +290,10 @@ def main() -> None:
         spectrum_neg, axis=0, from_signal=False, eps=1e-12)
     npwe_negative = npwe(
         spectrum_neg, axis=0, from_signal=False, eps=1e-12)
+    sfm_both = spectrum_flatness_measure(
+        spectrum_both, axis=0, from_signal=False, eps=1e-12)
+    npwe_both = npwe(
+        spectrum_both, axis=0, from_signal=False, eps=1e-12)
 
     fig, axes = plt.subplots(2, 2, figsize=(12, 6), sharex=True)
     axes[0, 0].plot(t, iq_data.real, label="I", alpha=0.7)
@@ -346,7 +352,8 @@ def main() -> None:
     fig3, ax3 = plt.subplots(figsize=(8, 5))
     ax3.plot(freqs_pos, spectrum_pos, label="Positive Side-band IQ Spectrum", alpha=0.7)
     ax3.plot(freqs_neg, spectrum_neg, label="Negative Side-band IQ Spectrum", alpha=0.7)
-    ax3.set_title(f"FFT Spectrum of Side-band IQ Signals\nSFM: {sfm_positive:.2f} (positive), {sfm_negative:.2f} (negative)\nNPWE: {npwe_positive:.2f} (positive), {npwe_negative:.2f} (negative)")
+    ax3.plot(freqs_both, spectrum_both, label="Band-pass IQ Spectrum", alpha=0.7, c="gray")
+    ax3.set_title(f"FFT Spectrum of Side-band IQ Signals\nSFM: {sfm_positive:.2f} (positive), {sfm_negative:.2f} (negative), {sfm_both:.2f} (both)\nNPWE: {npwe_positive:.2f} (positive), {npwe_negative:.2f} (negative), {npwe_both:.2f} (both)")
     ax3.set_xlabel("Frequency [Hz]")
     ax3.set_ylabel("Magnitude")
     ax3.set_xlim(0, 20)
