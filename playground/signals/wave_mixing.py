@@ -11,11 +11,13 @@ def generate_beat_signal(
     duration: float,
     freq1: float,
     freq2: float,
+    amp1: float = 1.0,
+    amp2: float = 1.0,
 ) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
     """Generate a beat signal from sin + sin."""
     t = np.arange(0, duration, 1 / sample_rate)
-    wave1 = np.sin(2 * np.pi * freq1 * t)
-    wave2 = np.sin(2 * np.pi * freq2 * t)
+    wave1 = amp1 * np.sin(2 * np.pi * freq1 * t)
+    wave2 = amp2 * np.sin(2 * np.pi * freq2 * t)
     beat = wave1 + wave2
     return t, beat, wave1, wave2
 
@@ -122,6 +124,8 @@ def main() -> None:
     duration = 5.0
     freq1 = 6.5
     freq2 = 9.0
+    amp1 = 2.0
+    amp2 = 1.0
     low_cutoff_hz = 7.5
     high_cutoff_hz = 8.0
     sync_target_hz = freq1
@@ -132,6 +136,8 @@ def main() -> None:
         duration=duration,
         freq1=freq1,
         freq2=freq2,
+        amp1=amp1,
+        amp2=amp2,
     )
 
     low_filtered = lowpass_filter(
