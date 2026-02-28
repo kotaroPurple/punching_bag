@@ -14,6 +14,7 @@ Candidates:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from itertools import product
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -128,6 +129,48 @@ def multicycle_dog_comb_kernel(
     return normalize_kernel(h)
 
 
+def multilobe_comb_bandstop_kernel(
+    fs: float,
+    f_low_hz: float,
+    f_high_hz: float,
+    n_freqs: int = 9,
+    n_side: int = 3,
+    side_sigma_ratio: float = 0.22,
+    decay: float = 0.68,
+) -> np.ndarray:
+    """Band-stop style MultiLobeComb by summing comb kernels tuned to multiple periods.
+
+    Each sub-kernel is tuned to one center frequency in [f_low_hz, f_high_hz].
+    Summation creates multiple shallow/deep notches over the target band.
+    """
+    freqs = np.linspace(f_low_hz, f_high_hz, n_freqs)
+    # emphasize middle of the band slightly
+    center = 0.5 * (f_low_hz + f_high_hz)
+    span = max(1e-6, 0.5 * (f_high_hz - f_low_hz))
+    weights = np.exp(-0.5 * ((freqs - center) / (0.7 * span)) ** 2)
+    weights /= np.sum(weights)
+
+    h_sum: np.ndarray | None = None
+    for w, f0 in zip(weights, freqs):
+        period_s = 1.0 / f0
+        side_sigma_s = side_sigma_ratio * period_s
+        h_i = multicycle_dog_comb_kernel(
+            fs=fs,
+            period_s=period_s,
+            side_sigma_s=side_sigma_s,
+            n_side=n_side,
+            decay=decay,
+        )
+        if h_sum is None:
+            h_sum = w * h_i
+        else:
+            h_sum, h_i = center_pad_to_same_length(h_sum, h_i)
+            h_sum = h_sum + w * h_i
+
+    assert h_sum is not None
+    return normalize_kernel(h_sum)
+
+
 def apply_filter(x: np.ndarray, h: np.ndarray) -> np.ndarray:
     return fftconvolve(x, h, mode="same")
 
@@ -139,13 +182,18 @@ def build_signals(fs: float, duration_s: float) -> tuple[np.ndarray, dict[str, n
     sine = 0.5 * np.sin(2.0 * np.pi * base_freq_hz * t)
 
     bump_center_s = duration_s * 0.55
-    bump_sigma_s = 0.060
-    bump_amp = 2.4
+    bump_sigma_s = 0.030
+    bump_amp = 1.0
     bump = bump_amp * np.exp(-0.5 * ((t - bump_center_s) / bump_sigma_s) ** 2)
     sine_plus_bump = sine + bump
 
-    # Beat-like signal (close frequencies)
-    beat = np.sin(2.0 * np.pi * 5.0 * t) + np.sin(2.0 * np.pi * 5.8 * t)
+    # Repetitive component spanning 3-10 Hz band
+    beat_freqs = [6.0, 7.5]
+    beat_amps = [0.9, 0.8]
+    beat_phases = [0.0, 0.6]
+    beat = np.zeros_like(t)
+    for a, f, p in zip(beat_amps, beat_freqs, beat_phases):
+        beat += a * np.sin(2.0 * np.pi * f * t + p)
     beat_plus_sine_bump = beat + sine_plus_bump
 
     signals = {
@@ -169,6 +217,24 @@ def make_candidates(fs: float) -> list[FilterSpec]:
     h_morlet_4cy = morlet_kernel(fs, sigma_s=0.30, f0_hz=5.4)
     h_comb_3 = multicycle_dog_comb_kernel(fs, period_s=1.0 / 5.4, side_sigma_s=0.045, n_side=3)
     h_comb_5 = multicycle_dog_comb_kernel(fs, period_s=1.0 / 5.4, side_sigma_s=0.040, n_side=5)
+    h_band_comb_3 = multilobe_comb_bandstop_kernel(
+        fs=fs,
+        f_low_hz=3.0,
+        f_high_hz=10.0,
+        n_freqs=9,
+        n_side=3,
+        side_sigma_ratio=0.22,
+        decay=0.84,
+    )
+    h_band_comb_5 = multilobe_comb_bandstop_kernel(
+        fs=fs,
+        f_low_hz=3.0,
+        f_high_hz=10.0,
+        n_freqs=11,
+        n_side=3,
+        side_sigma_ratio=0.22,
+        decay=0.84,
+    )
 
     return [
         # FilterSpec("LoG(s=50ms)", h_log),
@@ -179,7 +245,64 @@ def make_candidates(fs: float) -> list[FilterSpec]:
         FilterSpec("Morlet(~4cy,5.4Hz)", h_morlet_4cy),
         FilterSpec("MultiLobeComb(3)", h_comb_3),
         FilterSpec("MultiLobeComb(5)", h_comb_5),
+        FilterSpec("BandMultiLobeComb(best)", h_band_comb_3),
+        FilterSpec("BandMultiLobeComb(best-nearby)", h_band_comb_5),
     ]
+
+
+def search_best_band_comb(
+    fs: float,
+    signals: dict[str, np.ndarray],
+    t: np.ndarray,
+    bump_center_s: float,
+    bump_sigma_s: float,
+    top_k: int = 10,
+) -> list[tuple[float, float, float, float, int, int, float, float]]:
+    """Grid-search band MultiLobeComb parameters.
+
+    Returns rows sorted by score_mix desc:
+    (score_mix, score_beat, bump_peak, beat_rms, n_freqs, n_side, side_sigma_ratio, decay)
+    """
+    bump_window = np.abs(t - bump_center_s) <= 3.0 * bump_sigma_s
+    non_bump_window = ~bump_window
+
+    n_freqs_grid = [7, 9, 11, 13, 15]
+    n_side_grid = [3, 5, 7]
+    side_sigma_ratio_grid = [0.12, 0.15, 0.18, 0.22]
+    decay_grid = [0.60, 0.66, 0.72, 0.78, 0.84]
+
+    rows: list[tuple[float, float, float, float, int, int, float, float]] = []
+    for n_freqs, n_side, side_sigma_ratio, decay in product(
+        n_freqs_grid,
+        n_side_grid,
+        side_sigma_ratio_grid,
+        decay_grid,
+    ):
+        h = multilobe_comb_bandstop_kernel(
+            fs=fs,
+            f_low_hz=3.0,
+            f_high_hz=10.0,
+            n_freqs=n_freqs,
+            n_side=n_side,
+            side_sigma_ratio=side_sigma_ratio,
+            decay=decay,
+        )
+        y_sine = apply_filter(signals["sine"], h)
+        y_sine_bump = apply_filter(signals["sine + bump"], h)
+        y_beat = apply_filter(signals["beat"], h)
+        y_mix = apply_filter(signals["beat + sine + bump"], h)
+
+        bump_only_resp = y_sine_bump - y_sine
+        bump_peak = float(np.max(np.abs(bump_only_resp[bump_window])))
+        beat_rms = rms(y_beat)
+        mixed_bg_rms = rms(y_mix[non_bump_window])
+        score_beat = bump_peak / (beat_rms + 1e-12)
+        score_mix = bump_peak / (mixed_bg_rms + 1e-12)
+
+        rows.append((score_mix, score_beat, bump_peak, beat_rms, n_freqs, n_side, side_sigma_ratio, decay))
+
+    rows.sort(key=lambda r: r[0], reverse=True)
+    return rows[:top_k]
 
 
 def main() -> None:
@@ -228,8 +351,22 @@ def main() -> None:
     best_name = rows[0][0]
     print(f"\nBest by score_mix: {best_name}")
 
+    top = search_best_band_comb(
+        fs=fs,
+        signals=signals,
+        t=t,
+        bump_center_s=bump_center_s,
+        bump_sigma_s=bump_sigma_s,
+        top_k=10,
+    )
+    print("\nTop BandMultiLobeComb params by score_mix")
+    print("score_mix  score_beat  bump_peak  beat_rms  n_freqs  n_side  side_sigma_ratio  decay")
+    print("-" * 90)
+    for r in top:
+        print(f"{r[0]:9.4f}  {r[1]:10.4f}  {r[2]:9.4f}  {r[3]:8.4f}  {r[4]:7d}  {r[5]:6d}  {r[6]:16.3f}  {r[7]:5.2f}")
+
     n_filters = len(filters)
-    fig, axes = plt.subplots(n_filters, 3, figsize=(15, 2.6 * n_filters), sharex=False)
+    fig, axes = plt.subplots(n_filters, 3, figsize=(15, 1.5 * n_filters), sharex=False)
     fig.suptitle("Bump-oriented filter comparison (LoG variants + wavelet-like)", fontsize=13)
 
     for i, f in enumerate(filters):
@@ -261,7 +398,7 @@ def main() -> None:
 
     plt.tight_layout()
 
-    fig2, axes2 = plt.subplots(n_filters, 2, figsize=(14, 2.5 * n_filters), sharey=False)
+    fig2, axes2 = plt.subplots(n_filters, 2, figsize=(15, 1.5 * n_filters), sharey=False)
     fig2.suptitle("Original vs filtered (input: beat + sine + bump)", fontsize=13)
 
     x_mixed = signals["beat + sine + bump"]
