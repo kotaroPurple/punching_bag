@@ -144,21 +144,108 @@ def log_enhance_1d(x: NDArray[np.floating], sigma_samples: float) -> NDArray[np.
     return -(sigma_samples**2) * gaussian_filter1d(x, sigma=sigma_samples, order=2, mode="reflect")
 
 
+def complex_log_score(
+    y_complex: NDArray[np.complex128],
+    sigma_samples: float,
+    baseline_sigma_samples: float,
+) -> tuple[NDArray[np.floating], NDArray[np.floating], NDArray[np.floating]]:
+    """Apply LoG on real/imag separately, then combine and remove slow baseline."""
+    y_r = log_enhance_1d(y_complex.real, sigma_samples=sigma_samples)
+    y_i = log_enhance_1d(y_complex.imag, sigma_samples=sigma_samples)
+    score_raw = np.sqrt(y_r * y_r + y_i * y_i)
+    baseline = gaussian_filter1d(score_raw, sigma=baseline_sigma_samples, mode="reflect")
+    score = np.clip(score_raw - baseline, 0.0, None)
+    return score, score_raw, baseline
+
+
+def bump_bg_ratio(score: NDArray[np.floating], t: NDArray[np.floating], duration_s: float, bump_phase_s: float, win_s: float) -> tuple[float, float, float]:
+    bump_peaks = []
+    mask = np.zeros_like(score, dtype=bool)
+    for sec in range(int(np.floor(duration_s))):
+        c = sec + bump_phase_s
+        w = np.abs(t - c) <= win_s
+        if np.any(w):
+            bump_peaks.append(float(np.max(score[w])))
+            mask |= w
+    bump_mean_peak = float(np.mean(bump_peaks)) if bump_peaks else 0.0
+    bg_rms = float(np.sqrt(np.mean(score[~mask] ** 2))) if np.any(~mask) else 0.0
+    ratio = bump_mean_peak / (bg_rms + 1e-12)
+    return ratio, bump_mean_peak, bg_rms
+
+
+def build_filter_kernels(fs: float) -> dict[str, NDArray[np.floating]]:
+    """Filter-only candidates without frequency estimation/cancellation."""
+    h_base = band_multilobe_comb_kernel(
+        fs=fs,
+        f_low_hz=3.0,
+        f_high_hz=10.0,
+        n_freqs=9,
+        n_side=3,
+        side_sigma_ratio=0.22,
+        decay=0.84,
+    )
+    h_strong = band_multilobe_comb_kernel(
+        fs=fs,
+        f_low_hz=2.5,
+        f_high_hz=11.0,
+        n_freqs=15,
+        n_side=5,
+        side_sigma_ratio=0.24,
+        decay=0.90,
+    )
+    h_mid = band_multilobe_comb_kernel(
+        fs=fs,
+        f_low_hz=3.0,
+        f_high_hz=10.0,
+        n_freqs=13,
+        n_side=5,
+        side_sigma_ratio=0.20,
+        decay=0.88,
+    )
+    h_cascade_1 = band_multilobe_comb_kernel(
+        fs=fs,
+        f_low_hz=2.8,
+        f_high_hz=8.5,
+        n_freqs=11,
+        n_side=4,
+        side_sigma_ratio=0.22,
+        decay=0.86,
+    )
+    h_cascade_2 = band_multilobe_comb_kernel(
+        fs=fs,
+        f_low_hz=6.0,
+        f_high_hz=11.5,
+        n_freqs=11,
+        n_side=4,
+        side_sigma_ratio=0.22,
+        decay=0.86,
+    )
+    h_cascade, h_cascade_2 = center_pad_to_same_length(h_cascade_1, h_cascade_2)
+    h_cascade = normalize_kernel(fftconvolve(h_cascade, h_cascade_2, mode="full"))
+
+    return {
+        "baseline-comb": h_base,
+        "strong-comb": h_strong,
+        "dense-comb": h_mid,
+        "cascade-comb": h_cascade,
+    }
+
+
 def build_displacements(fs: float, duration_s: float) -> tuple[NDArray[np.floating], dict[str, NDArray[np.floating]]]:
     t = np.arange(0.0, duration_s, 1.0 / fs)
 
     # Target: 1 Hz, 0.2 mm + one localized bump per 1-second cycle
     target_base = 0.2e-3 * np.sin(2.0 * np.pi * 1.0 * t)
     bump = np.zeros_like(t)
-    bump_sigma_s = 0.045
-    bump_amp_m = 0.20e-3
+    bump_sigma_s = 0.01
+    bump_amp_m = 0.50e-3
     for sec in range(int(np.floor(duration_s))):
-        center = sec + 0.55
+        center = sec + 0.4
         bump += bump_amp_m * np.exp(-0.5 * ((t - center) / bump_sigma_s) ** 2)
     target = target_base + bump
 
     # Interference: large mm-order motion around 6-7 Hz
-    interference = 1.0e-3 * np.sin(2.0 * np.pi * 6.0 * t + 0.4) + 1.8e-3 * np.sin(2.0 * np.pi * 7.0 * t + 1.3)
+    interference = 0.5e-3 * np.sin(2.0 * np.pi * 6.0 * t + 0.4) + 1.1e-3 * np.sin(2.0 * np.pi * 7.3 * t + 1.3)
 
     return t, {
         "target_base": target_base,
@@ -183,27 +270,40 @@ def main() -> None:
     i_hp = apply_dccut_hpf(i_raw, fs=fs, cutoff_hz=0.1, order=2)
     q_hp = apply_dccut_hpf(q_raw, fs=fs, cutoff_hz=0.1, order=2)
 
-    h_band = band_multilobe_comb_kernel(
-        fs=fs,
-        f_low_hz=3.0,
-        f_high_hz=10.0,
-        n_freqs=9,
-        n_side=3,
-        side_sigma_ratio=0.22,
-        decay=0.84,
-    )
-    y_complex, score_raw = complex_iq_filter_response(i_hp, q_hp, h_band)
-    score_raw -= np.mean(score_raw)
-    y_log = log_enhance_1d(score_raw, sigma_samples=0.045 * fs)
+    kernels = build_filter_kernels(fs)
+
+    method_out: dict[str, dict[str, NDArray[np.floating] | NDArray[np.complex128] | float]] = {}
+    for name, h in kernels.items():
+        y_complex, _ = complex_iq_filter_response(i_hp, q_hp, h)
+        score, score_raw, baseline = complex_log_score(
+            y_complex,
+            sigma_samples=0.030 * fs,
+            baseline_sigma_samples=0.25 * fs,
+        )
+        ratio, bump_peak, bg_rms = bump_bg_ratio(score, t, duration_s=duration_s, bump_phase_s=0.40, win_s=0.08)
+        method_out[name] = {
+            "kernel": h,
+            "y_complex": y_complex,
+            "score_raw": score_raw,
+            "baseline": baseline,
+            "score": score,
+            "ratio": ratio,
+            "bump_peak": bump_peak,
+            "bg_rms": bg_rms,
+        }
+
+    best_method = max(method_out, key=lambda k: float(method_out[k]["ratio"]))
+    y_complex = method_out[best_method]["y_complex"]  # type: ignore[assignment]
+    baseline = method_out[best_method]["baseline"]  # type: ignore[assignment]
+    score = method_out[best_method]["score"]  # type: ignore[assignment]
 
     # Envelope-like measure for bump timing
-    score = np.abs(y_log)
     min_dist = int(0.6 * fs)
     threshold = np.mean(score) + 1.3 * np.std(score)
     peaks_global, _ = find_peaks(score, distance=min_dist, height=threshold)
 
     # Phase-locked pick: one peak per 1-second cycle near expected bump phase.
-    bump_phase_s = 0.55
+    bump_phase_s = 0.40
     bump_search_half_window_s = 0.25
     peaks_phase_locked: list[int] = []
     for sec in range(int(np.floor(duration_s))):
@@ -222,12 +322,20 @@ def main() -> None:
     peaks = np.asarray(peaks_phase_locked, dtype=int)
 
     print(f"fs={fs:.1f} Hz, duration={duration_s:.1f} s")
-    print(f"kernel_len={len(h_band)}")
+    print(f"selected kernel_len={len(method_out[best_method]['kernel'])}")
+    print("method ranking (higher ratio is better):")
+    sorted_methods = sorted(method_out.items(), key=lambda kv: float(kv[1]["ratio"]), reverse=True)
+    for name, out in sorted_methods:
+        print(
+            f"  {name:22s} ratio={float(out['ratio']):.3f} "
+            f"bump_peak={float(out['bump_peak']):.4f} bg_rms={float(out['bg_rms']):.4f}"
+        )
+    print(f"selected method={best_method}")
     print(f"global-peak detections={len(peaks_global)} at times (s): {np.round(t[peaks_global], 3)}")
     print(f"phase-locked detections={len(peaks)} at times (s): {np.round(t[peaks], 3)}")
 
-    fig, axes = plt.subplots(7, 1, figsize=(13, 12), sharex=True)
-    fig.suptitle("IQ bump extraction with DCCut(0.1Hz) + Analytic BandMultiLobeComb", fontsize=14)
+    fig, axes = plt.subplots(8, 1, figsize=(13, 14), sharex=True)
+    fig.suptitle("IQ bump extraction: filter-only alternatives for periodic suppression", fontsize=14)
 
     axes[0].plot(t, disp["target_total"] * 1e3, label="target (1Hz + bump)", lw=1.2)
     axes[0].plot(t, disp["interference"] * 1e3, label="interference (6Hz+7Hz)", lw=1.0)
@@ -248,41 +356,62 @@ def main() -> None:
     axes[2].legend(loc="upper right")
     axes[2].grid(alpha=0.3)
 
-    axes[3].plot(t, np.abs(y_complex), lw=1.0, color="0.35")
-    axes[3].set_ylabel("|Complex out|")
-    axes[3].set_title("Direct IQ filtering by analytic BandMultiLobeComb")
+    method_colors = {
+        "baseline-comb": "0.5",
+        "strong-comb": "tab:blue",
+        "dense-comb": "tab:orange",
+        "cascade-comb": "tab:green",
+    }
+    for name in kernels:
+        axes[3].plot(
+            t,
+            method_out[name]["score_raw"],
+            lw=0.9,
+            label=name,
+            color=method_colors.get(name, None),
+        )
+    axes[3].set_ylabel("Raw score")
+    axes[3].set_title("Method comparison (complex LoG combined)")
+    axes[3].legend(loc="upper right")
     axes[3].grid(alpha=0.3)
 
-    n = np.arange(-(len(h_band) // 2), len(h_band) // 2 + 1)
-    axes[4].plot(n / fs, h_band, color="tab:blue", lw=1.2)
+    h_best = method_out[best_method]["kernel"]
+    n = np.arange(-(len(h_best) // 2), len(h_best) // 2 + 1)
+    axes[4].plot(n / fs, h_best, color="tab:blue", lw=1.2)
     axes[4].axhline(0.0, color="0.3", lw=0.8)
     axes[4].set_ylabel("Kernel")
     axes[4].set_title("BandMultiLobeComb kernel (3-10 Hz suppression)")
     axes[4].grid(alpha=0.3)
 
-    axes[5].plot(t, y_complex.real, lw=1.0, color="tab:red", label="Re{y}")
-    axes[5].plot(t, y_complex.imag, lw=1.0, color="tab:purple", label="Im{y}")
-    axes[5].set_ylabel("Complex out")
-    axes[5].legend(loc="upper right")
+    axes[5].plot(t, np.abs(y_complex), lw=1.0, color="tab:red")
+    axes[5].set_ylabel("|Complex out|")
+    axes[5].set_title(f"Selected: {best_method}")
     axes[5].grid(alpha=0.3)
 
-    axes[6].plot(t, y_log, lw=1.0, color="tab:brown", label="BandComb + LoG")
-    axes[6].plot(t, score, lw=1.0, color="tab:orange", label="|response|")
-    axes[6].axhline(threshold, color="tab:green", ls="--", lw=1.0, label="threshold")
-    axes[6].plot(t[peaks_global], score[peaks_global], "x", color="0.35", ms=5, label="global peaks")
-    axes[6].plot(t[peaks], score[peaks], "ko", ms=4, label="phase-locked bumps")
+    axes[6].plot(t, y_complex.real, lw=1.0, color="tab:red", label="Re{y}")
+    axes[6].plot(t, y_complex.imag, lw=1.0, color="tab:purple", label="Im{y}")
+    axes[6].set_ylabel("Complex out")
+    axes[6].legend(loc="upper right")
+    axes[6].grid(alpha=0.3)
+
+    axes[7].plot(t, method_out[best_method]["score_raw"], lw=1.0, color="tab:brown", label="raw score")
+    axes[7].plot(t, baseline, lw=1.0, color="tab:blue", label="local baseline")
+    axes[7].plot(t, score, lw=1.0, color="tab:orange", label="score (baseline removed)")
+    axes[7].axhline(threshold, color="tab:green", ls="--", lw=1.0, label="threshold")
+    axes[7].plot(t[peaks_global], score[peaks_global], "x", color="0.35", ms=5, label="global peaks")
+    axes[7].plot(t[peaks], score[peaks], "ko", ms=4, label="phase-locked bumps")
     for sec in range(int(np.floor(duration_s))):
         center = sec + bump_phase_s
-        axes[6].axvspan(
+        axes[7].axvspan(
             center - bump_search_half_window_s,
             center + bump_search_half_window_s,
             color="tab:green",
             alpha=0.06,
         )
-    axes[6].set_ylabel("LoG score")
-    axes[6].set_xlabel("Time [s]")
-    axes[6].legend(loc="upper right")
-    axes[6].grid(alpha=0.3)
+    axes[7].set_ylabel("LoG score")
+    axes[7].set_xlabel("Time [s]")
+    axes[7].legend(loc="upper right")
+    axes[7].grid(alpha=0.3)
 
     plt.tight_layout()
     plt.show()
