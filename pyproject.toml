@@ -12,7 +12,7 @@ dependencies = [
     "matplotlib>=3.9.2",
     "neurokit2>=0.2.10",
     "numba>=0.60.0",
-    "numpy==2.0.2",
+    "numpy>=2.3.4",
     "pyqt6>=6.7.1",
     "pywavelets>=1.7.0",
     "scikit-learn>=1.5.2",
@@ -32,4 +32,8 @@ dependencies = [
     "jinja2>=3.1.4",
     "python-multipart>=0.0.20",
     "astropy>=7.2.0",
+    "enzanlab",
 ]
+
+[tool.uv.sources]
+enzanlab = { git = "https://github.com/kotaroPurple/enzanlab.git" }
